@@ -80,7 +80,7 @@ export default function OrganizationsPage() {
                   <span className={org.approved ? "badge approved" : "badge pending"}>{org.approved ? "Approved" : "Pending"}</span>
                   {!org.approved
                     ? <button className="secondary" onClick={() => void approve(org.id)}>Approve</button>
-                    : <button className="secondary" disabled title="Organization suspension is not supported by the current API">Suspend unavailable</button>}
+                    : <span className="badge unavailable" title="Organization suspension is not supported by the current API">Suspension unavailable</span>}
                 </div>
               </div>
             )) : <p className="empty">No matching organizations.</p>}

@@ -2151,9 +2151,50 @@ button[disabled] {
   color: #991b1b;
 }
 
+.badge.unavailable {
+  background: #f3f4f6;
+  color: #475569;
+}
+
 .badge.read-only-badge {
   background: #f3f4f6;
   color: #374151;
+}
+
+.admin-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+  padding: 2rem 1rem;
+  text-align: center;
+}
+
+.admin-empty-state-icon {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.admin-empty-state h3,
+.admin-empty-state p {
+  margin: 0;
+}
+
+.admin-empty-state h3 {
+  color: var(--color-text);
+  font-size: 1rem;
+}
+
+.admin-empty-state p {
+  max-width: 32rem;
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
 }
 
 .chain-verified {
@@ -2511,13 +2552,13 @@ tbody tr:hover {
 .admin-workspace {
   display: block;
   max-width: none;
-  padding: 0;
+  padding: 0 0 0 240px;
 }
 
 .admin-sidebar {
   position: fixed;
   z-index: 41;
-  top: 72px;
+  top: 76px;
   bottom: 0;
   left: 0;
   width: 240px;
@@ -2562,8 +2603,8 @@ tbody tr:hover {
 }
 
 .admin-route-main {
-  width: min(100% - 240px, 1200px);
-  max-width: none !important;
+  width: min(100%, 1200px);
+  max-width: 1200px !important;
   margin: 0 0 0 240px;
   padding: 2rem !important;
 }
@@ -2689,9 +2730,13 @@ tbody tr:hover {
     width: 200px;
   }
 
+  .admin-workspace {
+    padding-left: 200px;
+  }
+
   .admin-route-main {
-    width: min(100% - 200px, 1200px);
-    margin-left: 200px;
+    width: min(100%, 1200px);
+    margin: 0 auto;
     padding: 2rem 1.5rem !important;
   }
 
@@ -2775,8 +2820,8 @@ tbody tr:hover {
   }
 
   .admin-route-main {
-    width: min(100% - 240px, 1200px);
-    margin-left: 240px;
+    width: min(100%, 1200px);
+    margin: 0 auto;
     padding: 2rem !important;
   }
 
@@ -3352,9 +3397,13 @@ tbody tr:hover {
     width: 200px;
   }
 
+  .admin-workspace {
+    padding-left: 200px;
+  }
+
   .admin-route-main {
-    width: min(100% - 200px, 700px);
-    margin-left: 200px;
+    width: min(100%, 700px);
+    margin: 0 auto;
     padding: 1.5rem !important;
   }
 
@@ -3369,6 +3418,19 @@ tbody tr:hover {
 }
 
 @media (min-width: 1024px) {
+  .admin-workspace {
+    padding-left: 240px;
+  }
+
+  .admin-sidebar {
+    width: 240px;
+  }
+
+  .admin-route-main {
+    width: min(100%, 1200px);
+    margin: 0 auto;
+  }
+
   .panel:hover,
   .stat-card:hover,
   .recall-card:hover {
