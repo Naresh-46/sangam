@@ -82,12 +82,20 @@ export default function BatchesPage() {
           {visibleBatches.length ? (
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Medicine / batch</th><th>Manufacturer</th><th>Recorded holder</th><th>Expiry</th><th>Action</th><th>Custody</th></tr></thead>
+                <thead><tr><th>Medicine / batch</th><th>Manufacturer</th><th>Recorded holder</th><th>Expiry</th><th>Completeness</th><th>Action</th><th>Custody</th></tr></thead>
                 <tbody>{visibleBatches.map((batch) => (
                   <Fragment key={batch.id}>
                     <tr>
                       <td><b>{batch.medicineName}</b><small>{batch.batchNumber}</small></td>
                       <td>{batch.manufacturer}</td><td>{batch.currentHolder}</td><td>{batch.expiryDate}</td>
+                      <td>
+                        <div className={`completeness-meter completeness-${batch.custodyCompleteness >= 90 ? "high" : batch.custodyCompleteness >= 70 ? "medium" : "low"}`}>
+                          <span>{batch.custodyCompleteness}%</span>
+                          <div className="completeness-track" role="progressbar" aria-label={`Custody completeness ${batch.custodyCompleteness}%`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={batch.custodyCompleteness}>
+                            <span style={{ width: `${batch.custodyCompleteness}%` }} />
+                          </div>
+                        </div>
+                      </td>
                       <td>{batch.recalled ? <span className="badge recalled">Recalled</span> : (
                         <form className="recall-form" onSubmit={(event) => void recall(event, batch)}>
                           <select name="severity" defaultValue="CRITICAL" aria-label={`Recall severity for ${batch.batchNumber}`}>
@@ -100,7 +108,7 @@ export default function BatchesPage() {
                       <td><button type="button" className="secondary" onClick={() => void toggleCustody(batch.id)}>{custodyOpenId === batch.id ? "Hide" : "View"}</button></td>
                     </tr>
                     {custodyOpenId === batch.id && (
-                      <tr className="timeline-row"><td colSpan={6}>
+                      <tr className="timeline-row"><td colSpan={7}>
                         {custodyLoadingId === batch.id ? <p className="empty">Loading custody history…</p>
                           : custodyByBatch[batch.id]?.length ? <CustodyTimeline transfers={custodyByBatch[batch.id]} />
                           : <p className="empty">No transfer history recorded for this batch yet.</p>}

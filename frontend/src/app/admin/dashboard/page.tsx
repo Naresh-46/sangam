@@ -19,6 +19,7 @@ export default function AdminDashboardPage() {
         { label: "ACTIVE RECALLS", value: dashboard.kpis.activeRecalls, detail: "currently recorded", tone: "red" },
         { label: "TRANSFER RECORDS", value: dashboard.kpis.transferRecords, detail: "offers and accepted transfers", tone: "purple" },
         { label: "PENDING APPROVALS", value: dashboard.kpis.pendingApprovals, detail: "organizations waiting", tone: "amber" },
+        { label: "CUSTODY COMPLETENESS", value: dashboard.averageCustodyCompleteness === null ? "—" : `${dashboard.averageCustodyCompleteness}%`, detail: "average for active batches", tone: "teal" },
       ]
     : [];
 

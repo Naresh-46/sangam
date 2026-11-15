@@ -407,7 +407,7 @@ td small {
   margin: 0 0 12px;
 }
 .admin-kpis {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 .stat-card.stat-green {
   border-top: 3px solid #5aab7e;
@@ -423,6 +423,46 @@ td small {
 }
 .stat-card.stat-amber {
   border-top: 3px solid #d5a749;
+}
+.stat-card.stat-teal {
+  border-top: 3px solid #438f89;
+}
+.completeness-meter {
+  display: grid;
+  min-width: 90px;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.completeness-high {
+  color: #43815f;
+}
+.completeness-medium {
+  color: #9b7532;
+}
+.completeness-low {
+  color: #a8523f;
+}
+.completeness-track {
+  width: 76px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #edf1ec;
+}
+.completeness-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+.completeness-high .completeness-track span {
+  background: #5aab7e;
+}
+.completeness-medium .completeness-track span {
+  background: #d5a749;
+}
+.completeness-low .completeness-track span {
+  background: #c66a58;
 }
 .admin-panel-grid,
 .admin-management-grid {

@@ -14,6 +14,8 @@ export type Batch = {
   manufacturer: string;
   currentHolder: string;
   recalled: boolean;
+  custodyCompleteness: number;
+  pendingTransfers: number;
 };
 
 export type AdminDashboard = {
@@ -60,7 +62,8 @@ export type AdminDashboard = {
   }[];
   chainStatus: null;
   recallProgressAvailable: false;
-  custodyCompletenessAvailable: false;
+  custodyCompletenessAvailable: true;
+  averageCustodyCompleteness: number | null;
   alerts: { type: string; severity: string; message: string }[];
   organizations: Organization[];
   batches: Batch[];

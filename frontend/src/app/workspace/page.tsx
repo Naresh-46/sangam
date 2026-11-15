@@ -14,6 +14,8 @@ type Batch = {
   manufacturer: string;
   quantity: number;
   recalled: boolean;
+  custodyCompleteness: number;
+  pendingTransfers: number;
 };
 type Incoming = {
   id: string;
@@ -618,6 +620,7 @@ export default function OrganizationWorkspace() {
                         <th>Expiry</th>
                         <th>Quantity</th>
                         <th>Status</th>
+                        <th>Custody</th>
                         <th>QR label</th>
                         <th>Custody</th>
                         <th>Transfer</th>
@@ -641,6 +644,13 @@ export default function OrganizationWorkspace() {
                             </span>
                           </td>
                           <td>
+                            <span className={`badge ${batch.custodyCompleteness === 100 ? "approved" : "pending"}`}>
+                              {batch.custodyCompleteness === 100
+                                ? "✅ Complete"
+                                : `⚠️ ${batch.custodyCompleteness}% (${batch.pendingTransfers} pending)`}
+                            </span>
+                          </td>
+                          <td>
                             <BatchQrLabel batch={batch} />
                           </td>
                           <td>
@@ -659,7 +669,7 @@ export default function OrganizationWorkspace() {
                           </td>
                         </tr>
                         {custodyOpenId === batch.id && (
-                          <tr className="timeline-row"><td colSpan={7}>
+                          <tr className="timeline-row"><td colSpan={8}>
                             {custodyLoadingId === batch.id ? <p className="empty">Loading custody history…</p>
                               : custodyByBatch[batch.id]?.length ? <CustodyTimeline transfers={custodyByBatch[batch.id]} />
                               : <p className="empty">No transfer history recorded for this batch yet.</p>}

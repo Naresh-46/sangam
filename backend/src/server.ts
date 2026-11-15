@@ -41,6 +41,9 @@ const organizationSubRoles = ['ORG_ADMIN', 'OPERATOR', 'VIEWER'] as const;
 const memberSubRoles = ['OPERATOR', 'VIEWER'] as const;
 const parse = <T extends z.ZodTypeAny>(schema: T, value: unknown): z.infer<T> => schema.parse(value);
 const error = (statusCode: number, message: string) => Object.assign(new Error(message), { statusCode });
+function custodyCompleteness(confirmedTransfers: number, pendingTransfers: number) {
+  return Math.round(((confirmedTransfers + 1) / (confirmedTransfers + pendingTransfers + 1)) * 100);
+}
 
 async function passwordHash(password: string) {
   const salt = randomBytes(16);
@@ -297,10 +300,16 @@ app.get('/regulator/batches', { preHandler: [app.authenticate] }, async (request
   await requireRegulator(request);
   const rows = await prisma.batch.findMany({ orderBy: { createdAt: 'desc' }, include: {
     manufacturer: { select: { name: true } }, currentHolder: { select: { name: true } },
+    transfers: { where: { status: { in: ['CONFIRMED', 'PENDING'] } }, select: { status: true } },
   } });
   return rows.map(b => ({ id: b.id, medicineName: b.medicineName, batchNumber: b.batchNumber,
     expiryDate: b.expiryDate.toISOString().slice(0, 10), manufacturer: b.manufacturer.name,
-    currentHolder: b.currentHolder.name, recalled: b.recalled }));
+    currentHolder: b.currentHolder.name, recalled: b.recalled,
+    custodyCompleteness: custodyCompleteness(
+      b.transfers.filter(transfer => transfer.status === 'CONFIRMED').length,
+      b.transfers.filter(transfer => transfer.status === 'PENDING').length,
+    ),
+    pendingTransfers: b.transfers.filter(transfer => transfer.status === 'PENDING').length }));
 });
 
 app.get('/admin/dashboard', { preHandler: [app.authenticate] }, async (request) => {
@@ -337,6 +346,7 @@ app.get('/admin/dashboard', { preHandler: [app.authenticate] }, async (request) 
     } }),
     prisma.batch.findMany({ orderBy: { createdAt: 'desc' }, include: {
       manufacturer: { select: { name: true } }, currentHolder: { select: { name: true } },
+      transfers: { where: { status: { in: ['CONFIRMED', 'PENDING'] } }, select: { status: true } },
     } }),
     prisma.transfer.findMany({ orderBy: { offeredAt: 'desc' }, take: 5, include: {
       batch: { select: { batchNumber: true, medicineName: true } },
@@ -364,6 +374,15 @@ app.get('/admin/dashboard', { preHandler: [app.authenticate] }, async (request) 
     ...(pendingApprovals ? [{ type: 'approval', severity: 'info', message: `${pendingApprovals} organization${pendingApprovals === 1 ? '' : 's'} await approval.` }] : []),
   ];
 
+  const activeBatches = batches.filter(batch => !batch.recalled);
+  const batchCompleteness = (batch: typeof batches[number]) => custodyCompleteness(
+    batch.transfers.filter(transfer => transfer.status === 'CONFIRMED').length,
+    batch.transfers.filter(transfer => transfer.status === 'PENDING').length,
+  );
+  const averageCustodyCompleteness = activeBatches.length
+    ? Math.round(activeBatches.reduce((sum, batch) => sum + batchCompleteness(batch), 0) / activeBatches.length)
+    : null;
+
   return {
     kpis: { totalBatches, batchesThisMonth, totalOrganizations, approvedOrganizations,
       pendingApprovals, activeRecalls: activeRecallCount, transferRecords: transferCount },
@@ -385,13 +404,15 @@ app.get('/admin/dashboard', { preHandler: [app.authenticate] }, async (request) 
       status: transfer.status, offeredAt: transfer.offeredAt })),
     chainStatus: null,
     recallProgressAvailable: false,
-    custodyCompletenessAvailable: false,
+    custodyCompletenessAvailable: true,
+    averageCustodyCompleteness,
     alerts,
     organizations,
     batches: batches.map(batch => ({ id: batch.id, medicineName: batch.medicineName,
       batchNumber: batch.batchNumber, expiryDate: batch.expiryDate.toISOString().slice(0, 10),
       manufacturer: batch.manufacturer.name, currentHolder: batch.currentHolder.name,
-      recalled: batch.recalled })),
+      recalled: batch.recalled, custodyCompleteness: batchCompleteness(batch),
+      pendingTransfers: batch.transfers.filter(transfer => transfer.status === 'PENDING').length })),
   };
 });
 
@@ -419,10 +440,62 @@ app.post('/batches', { preHandler: [app.authenticate] }, async (request, reply) 
 app.get('/batches', { preHandler: [app.authenticate] }, async (request) => {
   const { org } = await loadOrganization(request);
   const rows = await prisma.batch.findMany({ where: { currentHolderId: org.id }, orderBy: { createdAt: 'desc' },
-    include: { manufacturer: { select: { name: true } } } });
+    include: {
+      manufacturer: { select: { name: true } },
+      transfers: { where: { status: { in: ['CONFIRMED', 'PENDING'] } }, select: { status: true } },
+    } });
   return rows.map(b => ({ id: b.id, medicineName: b.medicineName, batchNumber: b.batchNumber,
     expiryDate: b.expiryDate.toISOString().slice(0, 10), manufacturer: b.manufacturer.name,
-    quantity: b.quantity, recalled: b.recalled }));
+    quantity: b.quantity, recalled: b.recalled,
+    custodyCompleteness: custodyCompleteness(
+      b.transfers.filter(transfer => transfer.status === 'CONFIRMED').length,
+      b.transfers.filter(transfer => transfer.status === 'PENDING').length,
+    ),
+    pendingTransfers: b.transfers.filter(transfer => transfer.status === 'PENDING').length }));
+});
+
+app.get('/batches/:batchId', { preHandler: [app.authenticate] }, async request => {
+  const user = await loadUser(request);
+  if (user.role !== 'REGULATOR' && user.role !== 'ORGANIZATION') {
+    throw error(403, 'Regulator or organization account required');
+  }
+  const { batchId } = parse(z.object({ batchId: idSchema }), request.params);
+  const batch = await prisma.batch.findUnique({
+    where: { id: batchId },
+    include: {
+      manufacturer: { select: { id: true, name: true, kind: true } },
+      currentHolder: { select: { id: true, name: true, kind: true } },
+      transfers: { where: { status: { in: ['CONFIRMED', 'PENDING'] } }, select: { status: true } },
+    },
+  });
+  if (!batch) throw error(404, 'Batch not found');
+  if (user.role === 'ORGANIZATION') {
+    const { org } = await loadOrganization(request);
+    const belongsToOrg = batch.manufacturerId === org.id ||
+      batch.currentHolderId === org.id ||
+      await prisma.transfer.findFirst({
+        where: {
+          batchId,
+          status: 'CONFIRMED',
+          OR: [{ fromOrganizationId: org.id }, { toOrganizationId: org.id }],
+        },
+        select: { id: true },
+      }) !== null;
+    if (!belongsToOrg) throw error(403, 'Batch is outside your organization’s custody chain');
+  }
+  const confirmedTransfers = batch.transfers.filter(transfer => transfer.status === 'CONFIRMED').length;
+  const pendingTransfers = batch.transfers.filter(transfer => transfer.status === 'PENDING').length;
+  return {
+    id: batch.id,
+    medicineName: batch.medicineName,
+    batchNumber: batch.batchNumber,
+    expiryDate: batch.expiryDate.toISOString().slice(0, 10),
+    manufacturer: batch.manufacturer,
+    currentHolder: batch.currentHolder,
+    recalled: batch.recalled,
+    custodyCompleteness: custodyCompleteness(confirmedTransfers, pendingTransfers),
+    pendingTransfers,
+  };
 });
 
 async function offerTransfer(request: FastifyRequest, reply: FastifyReply) {
