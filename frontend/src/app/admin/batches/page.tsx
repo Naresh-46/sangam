@@ -4,6 +4,7 @@ import { FormEvent, Fragment, useMemo, useState } from "react";
 import { CustodyTimeline, type CustodyTransfer } from "@/components/CustodyTimeline";
 import { useAdminDashboard } from "@/components/admin/useAdminDashboard";
 import { api } from "@/lib/api";
+import { downloadCsv, toCsv } from "@/lib/csv";
 import type { Batch } from "@/components/admin/types";
 
 export default function BatchesPage() {
@@ -22,6 +23,32 @@ export default function BatchesPage() {
     const matchesStatus = status === "ALL" || (status === "RECALLED" ? batch.recalled : !batch.recalled);
     return matchesQuery && matchesStatus;
   }), [batches, query, status]);
+  const exportBatches = () => {
+    const date = new Date().toISOString().slice(0, 10);
+    const rows = visibleBatches.map((batch) => ({
+      batchNumber: batch.batchNumber,
+      medicine: batch.medicineName,
+      manufacturer: batch.manufacturer,
+      currentHolder: batch.currentHolder,
+      status: batch.recalled ? "Recalled" : "Active",
+      expiry: batch.expiryDate,
+      registered: batch.createdAt,
+      completeness: `${batch.custodyCompleteness}%`,
+    }));
+    downloadCsv(
+      `sangam-batches-${date}.csv`,
+      toCsv(rows, [
+        { key: "batchNumber", header: "Batch Number" },
+        { key: "medicine", header: "Medicine" },
+        { key: "manufacturer", header: "Manufacturer" },
+        { key: "currentHolder", header: "Current Holder" },
+        { key: "status", header: "Status" },
+        { key: "expiry", header: "Expiry" },
+        { key: "registered", header: "Registered" },
+        { key: "completeness", header: "Completeness" },
+      ]),
+    );
+  };
 
   const recall = async (event: FormEvent<HTMLFormElement>, batch: Batch) => {
     event.preventDefault();
@@ -72,7 +99,15 @@ export default function BatchesPage() {
       {(error || loadError) && <div className="message failure" role="alert">{error || loadError}</div>}
       {loading && !dashboard ? <div className="panel"><p className="empty">Loading batches…</p></div> : dashboard && (
         <section className="panel dashboard-panel">
-          <div className="panel-heading"><div><div className="eyebrow">BATCH REGISTRY</div><h2>All batches</h2></div><span className="count-pill">{visibleBatches.length} shown</span></div>
+          <div className="panel-heading">
+            <div><div className="eyebrow">BATCH REGISTRY</div><h2>All batches</h2></div>
+            <div className="row-actions">
+              <span className="count-pill">{visibleBatches.length} shown</span>
+              <button type="button" className="secondary csv-download-button" onClick={exportBatches} disabled={!visibleBatches.length}>
+                <span aria-hidden="true">↓</span> Download CSV
+              </button>
+            </div>
+          </div>
           <div className="admin-filter-row">
             <input className="filter-input" aria-label="Search batches" placeholder="Search medicine, batch, manufacturer or holder" value={query} onChange={(event) => setQuery(event.target.value)} />
             <select aria-label="Filter batch recall status" value={status} onChange={(event) => setStatus(event.target.value)}>

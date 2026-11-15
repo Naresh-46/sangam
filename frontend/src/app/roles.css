@@ -828,6 +828,27 @@ td small {
   gap: 10px;
   margin: 12px 0;
 }
+.csv-download-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.csv-download-button > span {
+  font-size: 15px;
+  line-height: 0.8;
+}
+.csv-download-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.admin-audit-heading {
+  margin-bottom: 16px;
+}
+.admin-audit-heading h2 {
+  margin-bottom: 0;
+}
 .admin-filter-row select,
 .admin-audit-filters input,
 .admin-audit-filters select {
@@ -973,6 +994,11 @@ td small {
     flex-direction: column;
   }
   .admin-pagination {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .admin-audit-heading,
+  .admin-audit-heading > .row-actions {
     align-items: flex-start;
     flex-direction: column;
   }

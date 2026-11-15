@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useAdminDashboard } from "@/components/admin/useAdminDashboard";
+import { downloadCsv, toCsv } from "@/lib/csv";
 
 const pageSize = 5;
 
@@ -26,6 +27,26 @@ export default function AuditPage() {
   }), [events, eventType, organizationQuery, dateFrom, dateTo]);
   const pageCount = Math.max(1, Math.ceil(filteredEvents.length / pageSize));
   const visibleEvents = filteredEvents.slice((page - 1) * pageSize, page * pageSize);
+  const exportEvents = () => {
+    const date = new Date().toISOString().slice(0, 10);
+    const rows = visibleEvents.map((event) => ({
+      timestamp: event.createdAt,
+      eventType: event.type,
+      actor: event.actor,
+      batchNumber: event.batchNumber,
+      details: event.details,
+    }));
+    downloadCsv(
+      `sangam-audit-log-${date}.csv`,
+      toCsv(rows, [
+        { key: "timestamp", header: "Timestamp" },
+        { key: "eventType", header: "Event Type" },
+        { key: "actor", header: "Actor" },
+        { key: "batchNumber", header: "Batch Number" },
+        { key: "details", header: "Details" },
+      ]),
+    );
+  };
 
   const updateFilter = (update: () => void) => {
     update();
@@ -41,6 +62,15 @@ export default function AuditPage() {
       {error && <div className="message failure" role="alert">{error}</div>}
       <div className="admin-api-note">The current dashboard API returns the latest 10 audit events. Filters and pagination apply to that available set.</div>
       <section className="panel dashboard-panel">
+        <div className="panel-heading admin-audit-heading">
+          <div><div className="eyebrow">TRACEABILITY</div><h2>Audit events</h2></div>
+          <div className="row-actions">
+            <span className="count-pill">{visibleEvents.length} shown</span>
+            <button type="button" className="secondary csv-download-button" onClick={exportEvents} disabled={!visibleEvents.length}>
+              <span aria-hidden="true">↓</span> Download CSV
+            </button>
+          </div>
+        </div>
         <div className="admin-audit-filters">
           <label>Event type<select value={eventType} onChange={(event) => updateFilter(() => setEventType(event.target.value))}>
             <option value="ALL">All event types</option>{eventTypes.map((type) => <option key={type} value={type}>{type.replaceAll("_", " ")}</option>)}

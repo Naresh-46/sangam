@@ -10,6 +10,7 @@ export type Batch = {
   id: string;
   medicineName: string;
   batchNumber: string;
+  createdAt: string;
   expiryDate: string;
   manufacturer: string;
   currentHolder: string;
