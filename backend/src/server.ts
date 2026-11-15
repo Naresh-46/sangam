@@ -3,7 +3,7 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
-import { Prisma, PrismaClient, type AuditEvent, type Organization, type User } from '@prisma/client';
+import { Prisma, PrismaClient, RecallSeverity, type AuditEvent, type Organization, type User } from '@prisma/client';
 import { randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { z, ZodError } from 'zod';
@@ -203,8 +203,11 @@ app.get('/admin/dashboard', { preHandler: [app.authenticate] }, async (request) 
     prisma.transfer.count(),
     prisma.organization.groupBy({ by: ['kind'], _count: { _all: true } }),
     prisma.batch.findMany({ where: { createdAt: { gte: ninetyDaysAgo } }, select: { createdAt: true } }),
-    prisma.batch.findMany({ where: { recalled: true }, orderBy: { createdAt: 'desc' }, take: 5,
-      include: { manufacturer: { select: { name: true } } } }),
+    prisma.batch.findMany({ where: { recalled: true }, orderBy: { createdAt: 'desc' },
+      include: {
+        manufacturer: { select: { name: true } },
+        recallAcknowledgments: { select: { status: true } },
+      } }),
     prisma.auditEvent.findMany({ orderBy: { createdAt: 'desc' }, take: 10, include: {
       actor: { select: { email: true } }, batch: { select: { batchNumber: true, medicineName: true } },
     } }),
@@ -248,7 +251,10 @@ app.get('/admin/dashboard', { preHandler: [app.authenticate] }, async (request) 
     activeRecalls: recallRows.map(batch => ({ id: batch.id, batchNumber: batch.batchNumber,
       medicineName: batch.medicineName, manufacturer: batch.manufacturer.name,
       expiryDate: batch.expiryDate.toISOString().slice(0, 10), quantity: batch.quantity,
-      reason: batch.recallReason })),
+      reason: batch.recallReason,
+      severity: batch.recallSeverity ?? 'CRITICAL',
+      totalDownstream: batch.recallAcknowledgments.length,
+      acknowledgedCount: batch.recallAcknowledgments.filter(item => item.status === 'ACKNOWLEDGED').length })),
     recentEvents: recentEvents.map(event => ({ id: event.id, type: event.eventType,
       actor: event.actor?.email ?? 'System', batchNumber: event.batch.batchNumber,
       medicineName: event.batch.medicineName, details: event.details, createdAt: event.createdAt })),
@@ -405,21 +411,165 @@ app.get('/batches/:batchId/transfers', { preHandler: [app.authenticate] }, async
   } });
 });
 
-app.post('/batches/:batchId/recall', { preHandler: [app.authenticate] }, async (request) => {
-  const actor = await requireRegulator(request);
-  const { batchId } = parse(z.object({ batchId: idSchema }), request.params);
-  const { reason } = parse(z.object({ reason: z.string().trim().min(4).max(2000) }), request.body);
-  const recalled = await prisma.$transaction(async tx => {
-    const found = await tx.batch.findUnique({ where: { id: batchId } });
-    if (!found) throw error(404, 'Batch not found');
-    if (found.recalled) throw error(409, 'Batch is already recalled');
-    const updated = await tx.batch.update({ where: { id: batchId }, data: { recalled: true, recallReason: reason } });
+async function createRecall(
+  batchId: string,
+  reason: string,
+  severity: RecallSeverity,
+  actor: User,
+) {
+  const result = await prisma.$transaction(async tx => {
+    const batch = await tx.batch.findUnique({
+      where: { id: batchId },
+      include: {
+        transfers: {
+          where: { status: 'CONFIRMED' },
+          select: { fromOrganizationId: true, toOrganizationId: true },
+        },
+      },
+    });
+    if (!batch) throw error(404, 'Batch not found');
+    if (batch.recalled) throw error(409, 'Batch is already recalled');
+
+    const organizationIds = new Set([
+      batch.manufacturerId,
+      batch.currentHolderId,
+      ...batch.transfers.flatMap(transfer => [
+        transfer.fromOrganizationId,
+        transfer.toOrganizationId,
+      ]),
+    ]);
+
+    const updated = await tx.batch.update({
+      where: { id: batchId },
+      data: { recalled: true, recallReason: reason, recallSeverity: severity },
+    });
+    await tx.recallAcknowledgment.createMany({
+      data: [...organizationIds].map(orgId => ({ recallId: batchId, orgId })),
+    });
     const auditEvent = await audit(tx, batchId, actor.id, 'RECALLED', reason);
     return { batch: updated, auditEvent };
   });
-  anchorAuditEvent(recalled.auditEvent);
-  const batch = recalled.batch;
-  return { id: batch.id, recalled: batch.recalled };
+  anchorAuditEvent(result.auditEvent);
+  return { id: result.batch.id, recalled: result.batch.recalled };
+}
+
+app.post('/recalls', { preHandler: [app.authenticate] }, async request => {
+  const actor = await requireRegulator(request);
+  const { batchId, reason, severity } = parse(z.object({
+    batchId: idSchema,
+    reason: z.string().trim().min(4).max(2000),
+    severity: z.nativeEnum(RecallSeverity).default('CRITICAL'),
+  }), request.body);
+  return createRecall(batchId, reason, severity, actor);
+});
+
+app.post('/batches/:batchId/recall', { preHandler: [app.authenticate] }, async request => {
+  const actor = await requireRegulator(request);
+  const { batchId } = parse(z.object({ batchId: idSchema }), request.params);
+  const { reason, severity } = parse(z.object({
+    reason: z.string().trim().min(4).max(2000),
+    severity: z.nativeEnum(RecallSeverity).default('CRITICAL'),
+  }), request.body);
+  return createRecall(batchId, reason, severity, actor);
+});
+
+app.get('/recalls/active', { preHandler: [app.authenticate] }, async request => {
+  const { org } = await loadOrganization(request);
+  const acknowledgments = await prisma.recallAcknowledgment.findMany({
+    where: { orgId: org.id, recall: { recalled: true } },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      recallId: true,
+      status: true,
+      acknowledgedAt: true,
+      recall: {
+        select: {
+          batchNumber: true,
+          medicineName: true,
+          recallReason: true,
+          recallSeverity: true,
+        },
+      },
+    },
+  });
+  return acknowledgments.map(item => ({
+    id: item.recallId,
+    batchNumber: item.recall.batchNumber,
+    medicineName: item.recall.medicineName,
+    reason: item.recall.recallReason,
+    severity: item.recall.recallSeverity ?? 'CRITICAL',
+    status: item.status,
+    acknowledgedAt: item.acknowledgedAt,
+  }));
+});
+
+app.get('/recalls/:recallId', { preHandler: [app.authenticate] }, async request => {
+  const user = await loadUser(request);
+  const { recallId } = parse(z.object({ recallId: idSchema }), request.params);
+  const recall = await prisma.batch.findUnique({
+    where: { id: recallId },
+    select: {
+      id: true,
+      recalled: true,
+      recallReason: true,
+      recallSeverity: true,
+      medicineName: true,
+      batchNumber: true,
+      recallAcknowledgments: {
+        orderBy: { createdAt: 'asc' },
+        include: { organization: { select: { id: true, name: true, kind: true } } },
+      },
+    },
+  });
+  if (!recall?.recalled) throw error(404, 'Recall not found');
+  if (user.role === 'ORGANIZATION' &&
+      !recall.recallAcknowledgments.some(item => item.orgId === user.organizationId)) {
+    throw error(403, 'Recall is not in your organization’s custody chain');
+  }
+  if (user.role !== 'REGULATOR' && user.role !== 'ORGANIZATION') {
+    throw error(403, 'Regulator or organization account required');
+  }
+  return {
+    id: recall.id,
+    medicineName: recall.medicineName,
+    batchNumber: recall.batchNumber,
+    reason: recall.recallReason,
+    severity: recall.recallSeverity ?? 'CRITICAL',
+    acknowledgments: recall.recallAcknowledgments.map(item => ({
+      orgId: item.orgId,
+      organization: item.organization,
+      status: item.status,
+      acknowledgedAt: item.acknowledgedAt,
+    })),
+  };
+});
+
+app.post('/recalls/:recallId/acknowledge', { preHandler: [app.authenticate] }, async request => {
+  const { user, org } = await loadOrganization(request);
+  const { recallId } = parse(z.object({ recallId: idSchema }), request.params);
+  const result = await prisma.$transaction(async tx => {
+    const acknowledgment = await tx.recallAcknowledgment.findFirst({
+      where: { recallId, orgId: org.id, status: 'PENDING' },
+    });
+    if (!acknowledgment) {
+      throw error(404, 'Pending recall acknowledgment not found for this organization');
+    }
+    const updated = await tx.recallAcknowledgment.update({
+      where: { id: acknowledgment.id },
+      data: { status: 'ACKNOWLEDGED', acknowledgedAt: new Date() },
+      include: { organization: { select: { id: true, name: true } } },
+    });
+    const auditEvent = await audit(
+      tx,
+      recallId,
+      user.id,
+      'RECALL_ACKNOWLEDGED',
+      `${org.name} acknowledged the recall`,
+    );
+    return { acknowledgment: updated, auditEvent };
+  });
+  anchorAuditEvent(result.auditEvent);
+  return result.acknowledgment;
 });
 
 app.get('/verify/:batchId', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request) => {

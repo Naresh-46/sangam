@@ -42,6 +42,9 @@ type DashboardData = {
     expiryDate: string;
     quantity: number;
     reason: string | null;
+    severity: "LOW" | "MODERATE" | "HIGH" | "CRITICAL";
+    totalDownstream: number;
+    acknowledgedCount: number;
   }[];
   recentEvents: {
     id: string;
@@ -167,9 +170,10 @@ export default function AdminPage() {
     if (!window.confirm(`Recall batch ${batch.batchNumber}? This will block further transfers.`)) return;
     await action(async () => {
       const reason = new FormData(element).get("reason");
-      await api(`/batches/${batch.id}/recall`, {
+      const severity = new FormData(element).get("severity");
+      await api("/recalls", {
         method: "POST",
-        body: JSON.stringify({ reason }),
+        body: JSON.stringify({ batchId: batch.id, reason, severity }),
       });
       setNotice(`Batch ${batch.batchNumber} recalled.`);
       await reload();
@@ -266,12 +270,33 @@ export default function AdminPage() {
                       <div className="recall-card" key={recall.id}>
                         <div className="recall-card-title">
                           <span className="badge recalled">Recalled</span>
+                          <span className={`badge recall-severity severity-${recall.severity.toLowerCase()}`}>
+                            {recall.severity}
+                          </span>
                           <b>{recall.batchNumber}</b>
                         </div>
                         <p>{recall.medicineName} · {recall.manufacturer}</p>
                         <small>{recall.reason || "No reason recorded"} · expiry {recall.expiryDate}</small>
+                        <div
+                          className="recall-progress"
+                          role="progressbar"
+                          aria-label={`${recall.acknowledgedCount} of ${recall.totalDownstream} downstream organizations acknowledged`}
+                          aria-valuemin={0}
+                          aria-valuemax={recall.totalDownstream}
+                          aria-valuenow={recall.acknowledgedCount}
+                        >
+                          <span
+                            style={{
+                              width: recall.totalDownstream
+                                ? `${(recall.acknowledgedCount / recall.totalDownstream) * 100}%`
+                                : "0%",
+                            }}
+                          />
+                        </div>
                         <div className="recall-card-footer">
-                          <span>Recovery progress: no data yet</span>
+                          <span>
+                            {recall.acknowledgedCount}/{recall.totalDownstream} downstream orgs acknowledged
+                          </span>
                           <button className="secondary" onClick={() => trackBatch(recall.id)}>Track batch</button>
                         </div>
                       </div>
@@ -397,6 +422,12 @@ export default function AdminPage() {
                           <td>{batch.manufacturer}</td><td>{batch.currentHolder}</td><td>{batch.expiryDate}</td>
                           <td>{batch.recalled ? <span className="badge recalled">Recalled</span> : (
                             <form className="recall-form" onSubmit={(e) => recall(e, batch)}>
+                              <select name="severity" defaultValue="CRITICAL" aria-label="Recall severity">
+                                <option value="LOW">Low</option>
+                                <option value="MODERATE">Moderate</option>
+                                <option value="HIGH">High</option>
+                                <option value="CRITICAL">Critical</option>
+                              </select>
                               <input name="reason" placeholder="Recall reason" minLength={4} required />
                               <button className="danger-button">Recall</button>
                             </form>

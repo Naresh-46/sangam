@@ -23,6 +23,15 @@ type Incoming = {
   batch: { batchNumber: string; medicineName: string };
 };
 type Partner = { id: string; name: string; kind: string };
+type ActiveRecall = {
+  id: string;
+  batchNumber: string;
+  medicineName: string;
+  severity: "LOW" | "MODERATE" | "HIGH" | "CRITICAL";
+  reason: string | null;
+  status: "PENDING" | "ACKNOWLEDGED";
+  acknowledgedAt: string | null;
+};
 type Me = {
   email: string;
   organization: {
@@ -87,6 +96,9 @@ export default function OrganizationWorkspace() {
   const [me, setMe] = useState<Me | null>(null);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [incoming, setIncoming] = useState<Incoming[]>([]);
+  const [activeRecalls, setActiveRecalls] = useState<ActiveRecall[]>([]);
+  const [recallLoading, setRecallLoading] = useState(true);
+  const [acknowledgingRecallId, setAcknowledgingRecallId] = useState<string | null>(null);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [transferBatch, setTransferBatch] = useState<Batch | null>(null);
   const [custodyOpenId, setCustodyOpenId] = useState<string | null>(null);
@@ -111,19 +123,25 @@ export default function OrganizationWorkspace() {
     );
     setMe(who);
     if (!who.organization?.approved) return;
-    const [stock, transfers, orgs] = await Promise.all([
+    const [stock, transfers, orgs, recalls] = await Promise.all([
       api<Batch[]>("/batches"),
       api<Incoming[]>("/transfers/incoming"),
       api<Partner[]>("/organizations/active"),
+      api<ActiveRecall[]>("/recalls/active"),
     ]);
     setBatches(stock);
     setIncoming(transfers);
     setPartners(orgs);
+    setActiveRecalls(recalls);
+    setRecallLoading(false);
   };
   useEffect(() => {
     load()
       .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setRecallLoading(false);
+      });
   }, []);
   const action = async (work: () => Promise<void>) => {
     setNotice("");
@@ -194,6 +212,28 @@ export default function OrganizationWorkspace() {
       setNotice("Transfer rejected.");
       await load();
     });
+  const acknowledgeRecall = async (recall: ActiveRecall) => {
+    setAcknowledgingRecallId(recall.id);
+    await action(async () => {
+      const updated = await api<{
+        status: "ACKNOWLEDGED";
+        acknowledgedAt: string;
+      }>(`/recalls/${recall.id}/acknowledge`, { method: "POST" });
+      setActiveRecalls((current) =>
+        current.map((item) =>
+          item.id === recall.id
+            ? {
+                ...item,
+                status: updated.status,
+                acknowledgedAt: updated.acknowledgedAt,
+              }
+            : item,
+        ),
+      );
+      setNotice(`Recall acknowledged for batch ${recall.batchNumber}.`);
+    });
+    setAcknowledgingRecallId(null);
+  };
   const toggleCustody = async (batchId: string) => {
     if (custodyOpenId === batchId) {
       setCustodyOpenId(null);
@@ -275,6 +315,52 @@ export default function OrganizationWorkspace() {
                 </div>
               ) : (
                 <p className="empty">No incoming transfers are awaiting your response.</p>
+              )}
+            </section>
+            <section className="panel active-recalls-panel">
+              <div className="panel-heading">
+                <div>
+                  <div className="eyebrow">BATCH SAFETY</div>
+                  <h2>Active Recalls</h2>
+                </div>
+                <span className="count-pill">{activeRecalls.length}</span>
+              </div>
+              {recallLoading ? (
+                <p className="empty">Loading active recalls…</p>
+              ) : activeRecalls.length ? (
+                <div className="dashboard-list">
+                  {activeRecalls.map((recall) => (
+                    <article className="recall-card" key={recall.id}>
+                      <div className="recall-card-title">
+                        <span className={`badge recall-severity severity-${recall.severity.toLowerCase()}`}>
+                          {recall.severity}
+                        </span>
+                        <b>{recall.batchNumber}</b>
+                      </div>
+                      <p>{recall.medicineName}</p>
+                      <small>{recall.reason || "No reason recorded"}</small>
+                      <div className="recall-card-footer">
+                        {recall.status === "ACKNOWLEDGED" ? (
+                          <span className="recall-acknowledged">✓ Acknowledged</span>
+                        ) : (
+                          <>
+                            <span>Confirm you have stopped selling and removed the batch.</span>
+                            <button
+                              className="secondary"
+                              type="button"
+                              disabled={acknowledgingRecallId === recall.id}
+                              onClick={() => acknowledgeRecall(recall)}
+                            >
+                              {acknowledgingRecallId === recall.id ? "Saving…" : "Acknowledge"}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="empty">No active recalls affect your organization.</p>
               )}
             </section>
             <div className="stat-row">

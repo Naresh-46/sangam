@@ -212,6 +212,13 @@ td small {
   border-radius: 5px;
   font-size: 9px;
 }
+.recall-form select {
+  min-width: 88px;
+  padding: 7px;
+  border: 1px solid #e2e7e0;
+  border-radius: 5px;
+  font-size: 9px;
+}
 .danger-button {
   background: #fff;
   border: 1px solid #e7c7be;
@@ -456,6 +463,25 @@ td small {
   margin-left: auto;
   font-size: 11px;
 }
+.recall-severity {
+  margin-right: auto;
+}
+.severity-low {
+  background: #edf5ef;
+  color: #43815f;
+}
+.severity-moderate {
+  background: #fff3dc;
+  color: #9b7532;
+}
+.severity-high {
+  background: #ffeadc;
+  color: #b36535;
+}
+.severity-critical {
+  background: #fae9e4;
+  color: #a8523f;
+}
 .recall-card p {
   margin: 8px 0 4px;
   font-size: 11px;
@@ -468,6 +494,27 @@ td small {
 }
 .recall-card-footer {
   margin-top: 10px;
+}
+.active-recalls-panel {
+  margin: 16px 0;
+}
+.recall-acknowledged {
+  color: #43815f !important;
+  font-weight: 700;
+}
+.recall-progress {
+  height: 7px;
+  margin-top: 13px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #edf1ec;
+}
+.recall-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #5aab7e;
+  transition: width 180ms ease;
 }
 .activity-row {
   display: grid;

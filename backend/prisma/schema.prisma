@@ -24,69 +24,98 @@ enum TransferStatus {
   REJECTED
 }
 
+enum RecallAcknowledgmentStatus {
+  PENDING
+  ACKNOWLEDGED
+}
+
+enum RecallSeverity {
+  LOW
+  MODERATE
+  HIGH
+  CRITICAL
+}
+
 model Organization {
-  id            String           @id @default(uuid()) @db.Uuid
-  name          String           @db.VarChar(160)
-  kind          OrganizationKind
-  licenseNumber String           @unique @db.VarChar(100)
-  approved      Boolean          @default(false)
-  users         User[]
-  manufactured Batch[]           @relation("Manufacturer")
-  holdings      Batch[]           @relation("CurrentHolder")
-  sentTransfers Transfer[]       @relation("TransferFrom")
-  recvTransfers Transfer[]       @relation("TransferTo")
-  createdAt     DateTime         @default(now()) @db.Timestamptz(3)
+  id                    String                 @id @default(uuid()) @db.Uuid
+  name                  String                 @db.VarChar(160)
+  kind                  OrganizationKind
+  licenseNumber         String                 @unique @db.VarChar(100)
+  approved              Boolean                @default(false)
+  users                 User[]
+  manufactured          Batch[]                @relation("Manufacturer")
+  holdings              Batch[]                @relation("CurrentHolder")
+  sentTransfers         Transfer[]             @relation("TransferFrom")
+  recvTransfers         Transfer[]             @relation("TransferTo")
+  recallAcknowledgments RecallAcknowledgment[]
+  createdAt             DateTime               @default(now()) @db.Timestamptz(3)
 }
 
 model User {
-  id             String       @id @default(uuid()) @db.Uuid
-  email          String       @unique @db.VarChar(254)
-  passwordHash   String       @db.VarChar(256)
+  id             String        @id @default(uuid()) @db.Uuid
+  email          String        @unique @db.VarChar(254)
+  passwordHash   String        @db.VarChar(256)
   role           UserRole
-  organizationId String?      @db.Uuid
+  organizationId String?       @db.Uuid
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  active         Boolean      @default(true)
+  active         Boolean       @default(true)
   auditEvents    AuditEvent[]
-  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
 }
 
 model Batch {
-  id                String       @id @default(uuid()) @db.Uuid
-  medicineName      String       @db.VarChar(160)
-  strength          String       @db.VarChar(80)
-  batchNumber       String       @db.VarChar(100)
-  expiryDate        DateTime     @db.Date
-  quantity          Int
-  commonUse         String?
-  manufacturerId    String       @db.Uuid
-  manufacturer      Organization @relation("Manufacturer", fields: [manufacturerId], references: [id], onDelete: Restrict)
-  currentHolderId   String       @db.Uuid
-  currentHolder     Organization @relation("CurrentHolder", fields: [currentHolderId], references: [id], onDelete: Restrict)
-  documentSha256    String?      @db.Char(64)
-  recalled          Boolean      @default(false)
-  recallReason      String?      @db.Text
-  transfers         Transfer[]
-  auditEvents       AuditEvent[]
-  createdAt         DateTime     @default(now()) @db.Timestamptz(3)
+  id                    String                 @id @default(uuid()) @db.Uuid
+  medicineName          String                 @db.VarChar(160)
+  strength              String                 @db.VarChar(80)
+  batchNumber           String                 @db.VarChar(100)
+  expiryDate            DateTime               @db.Date
+  quantity              Int
+  commonUse             String?
+  manufacturerId        String                 @db.Uuid
+  manufacturer          Organization           @relation("Manufacturer", fields: [manufacturerId], references: [id], onDelete: Restrict)
+  currentHolderId       String                 @db.Uuid
+  currentHolder         Organization           @relation("CurrentHolder", fields: [currentHolderId], references: [id], onDelete: Restrict)
+  documentSha256        String?                @db.Char(64)
+  recalled              Boolean                @default(false)
+  recallReason          String?                @db.Text
+  recallSeverity        RecallSeverity?
+  transfers             Transfer[]
+  auditEvents           AuditEvent[]
+  recallAcknowledgments RecallAcknowledgment[]
+  createdAt             DateTime               @default(now()) @db.Timestamptz(3)
 
   @@index([currentHolderId, createdAt])
   @@index([batchNumber])
 }
 
 model Transfer {
-  id                    String         @id @default(uuid()) @db.Uuid
-  batchId               String         @db.Uuid
-  batch                 Batch          @relation(fields: [batchId], references: [id], onDelete: Restrict)
-  fromOrganizationId    String         @db.Uuid
-  fromOrganization      Organization   @relation("TransferFrom", fields: [fromOrganizationId], references: [id], onDelete: Restrict)
-  toOrganizationId      String         @db.Uuid
-  toOrganization        Organization   @relation("TransferTo", fields: [toOrganizationId], references: [id], onDelete: Restrict)
-  status                TransferStatus @default(PENDING)
-  offeredAt             DateTime       @default(now()) @db.Timestamptz(3)
-  confirmedAt            DateTime?      @db.Timestamptz(3)
+  id                 String         @id @default(uuid()) @db.Uuid
+  batchId            String         @db.Uuid
+  batch              Batch          @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  fromOrganizationId String         @db.Uuid
+  fromOrganization   Organization   @relation("TransferFrom", fields: [fromOrganizationId], references: [id], onDelete: Restrict)
+  toOrganizationId   String         @db.Uuid
+  toOrganization     Organization   @relation("TransferTo", fields: [toOrganizationId], references: [id], onDelete: Restrict)
+  status             TransferStatus @default(PENDING)
+  offeredAt          DateTime       @default(now()) @db.Timestamptz(3)
+  confirmedAt        DateTime?      @db.Timestamptz(3)
 
   @@index([batchId, status])
   @@index([toOrganizationId, status])
+}
+
+model RecallAcknowledgment {
+  id             String                     @id @default(uuid()) @db.Uuid
+  recallId       String                     @db.Uuid
+  recall         Batch                      @relation(fields: [recallId], references: [id], onDelete: Restrict)
+  orgId          String                     @db.Uuid
+  organization   Organization               @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  status         RecallAcknowledgmentStatus @default(PENDING)
+  acknowledgedAt DateTime?                  @db.Timestamptz(3)
+  createdAt      DateTime                   @default(now()) @db.Timestamptz(3)
+
+  @@unique([recallId, orgId])
+  @@index([orgId, status])
 }
 
 model AuditEvent {
