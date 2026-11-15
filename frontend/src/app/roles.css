@@ -257,6 +257,12 @@ td small {
 .role-note p {
   margin: 10px 0;
 }
+.common-use-note {
+  margin: -8px 0 16px;
+  color: #638072;
+  font-size: 11px;
+  line-height: 1.5;
+}
 .incoming-panel {
   margin: 16px 0;
 }

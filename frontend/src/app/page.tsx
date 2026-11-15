@@ -9,6 +9,7 @@ type Verification = {
   message?: string;
   medicineName?: string;
   strength?: string;
+  commonUse?: string | null;
   batchNumber?: string;
   expiryDate?: string;
   manufacturer?: string;
@@ -167,6 +168,11 @@ export default function PublicVerification() {
                     <h3>
                       {result.medicineName} <span>{result.strength}</span>
                     </h3>
+                    {result.commonUse?.trim() && (
+                      <p className="common-use-note">
+                        Common use: {result.commonUse.trim()}
+                      </p>
+                    )}
                     <div className="result-grid">
                       <div>
                         <small>BATCH NUMBER</small>

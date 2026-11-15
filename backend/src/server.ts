@@ -273,6 +273,7 @@ app.post('/batches', { preHandler: [app.authenticate] }, async (request, reply) 
   if (org.kind !== 'MANUFACTURER') throw error(403, 'Only manufacturers can register batches');
   const body = parse(z.object({ medicineName: z.string().trim().min(1).max(160), strength: z.string().trim().min(1).max(80),
     batchNumber: z.string().trim().min(1).max(100), expiryDate: z.coerce.date(), quantity: z.number().int().positive(),
+    commonUse: z.string().trim().optional(),
     documentSha256: z.string().regex(/^[a-f\d]{64}$/i).optional() }), request.body);
   if (body.expiryDate < new Date(new Date().toISOString().slice(0, 10))) throw error(422, 'Expiry date must be today or later');
   const created = await prisma.$transaction(async tx => {
@@ -283,7 +284,8 @@ app.post('/batches', { preHandler: [app.authenticate] }, async (request, reply) 
   anchorAuditEvent(created.auditEvent);
   const batch = created.batch;
   return reply.code(201).send({ id: batch.id, medicineName: batch.medicineName, batchNumber: batch.batchNumber,
-    expiryDate: batch.expiryDate.toISOString().slice(0, 10), quantity: batch.quantity });
+    expiryDate: batch.expiryDate.toISOString().slice(0, 10), quantity: batch.quantity,
+    commonUse: batch.commonUse });
 });
 
 app.get('/batches', { preHandler: [app.authenticate] }, async (request) => {
@@ -451,7 +453,8 @@ app.get('/verify/:batchId', { config: { rateLimit: { max: 30, timeWindow: '1 min
       chainStatus,
     };
   }));
-  return { status, medicineName: batch.medicineName, strength: batch.strength, batchNumber: batch.batchNumber,
+  return { status, medicineName: batch.medicineName, strength: batch.strength, commonUse: batch.commonUse,
+    batchNumber: batch.batchNumber,
     expiryDate: batch.expiryDate.toISOString().slice(0, 10), manufacturer: batch.manufacturer.name,
     currentHolder: batch.currentHolder.name,
     custodyHistory,
