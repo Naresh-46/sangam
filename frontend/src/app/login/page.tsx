@@ -72,10 +72,12 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="shell">
+    <div className="shell login-shell">
       <SiteHeader area="public" />
       <main className="narrow-main">
         <section className="panel">
+          <div className="login-brand">SANGAM</div>
+          <p className="login-tagline">Medicine Supply Chain Verification</p>
           <div className="eyebrow">AUTHORIZED ACCESS</div>
           <h1 className="page-title">Sign in to your workspace</h1>
           <p className="muted">

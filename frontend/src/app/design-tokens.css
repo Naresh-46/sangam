@@ -1,0 +1,17 @@
+:root {
+  --color-primary: #0d7377;
+  --color-primary-light: #14a085;
+  --color-bg: #f8fafb;
+  --color-surface: #ffffff;
+  --color-text: #1a2b3c;
+  --color-text-secondary: #5a6b7c;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+  --color-border: #e2e8f0;
+  --color-sidebar: #0f172a;
+  --radius: 12px;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.12);
+  --font: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+}

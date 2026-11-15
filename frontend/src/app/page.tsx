@@ -128,7 +128,7 @@ export default function PublicVerification() {
             <div className="medicine-pack">
               <div className="pack-band" />
               <div className="pack-brand">
-                ANANTA<small>TRACEABLE BATCH</small>
+                SANGAM<small>TRACEABLE BATCH</small>
               </div>
               <div className="pack-lines">
                 <i />
@@ -206,6 +206,33 @@ export default function PublicVerification() {
             {error && <div className="message failure">{error}</div>}
             {result && (
               <>
+                <div
+                  className={`status-banner ${
+                    result.status === "RECALLED"
+                      ? "status-banner-recalled"
+                      : result.status === "RECORDED" || result.status === "VERIFIED"
+                        ? "status-banner-verified"
+                        : result.status.includes("NOT_FOUND") || result.status.includes("INVALID")
+                          ? "status-banner-not-found"
+                          : "status-banner-warning"
+                  }`}
+                  role="status"
+                >
+                  <span aria-hidden="true">
+                    {result.status === "RECALLED"
+                      ? "!"
+                      : result.status === "RECORDED" || result.status === "VERIFIED"
+                        ? "✓"
+                        : "•"}
+                  </span>
+                  {result.status === "RECALLED"
+                    ? "This batch has been recalled"
+                    : result.status === "RECORDED" || result.status === "VERIFIED"
+                      ? "This batch is verified"
+                      : result.status.includes("NOT_FOUND") || result.status.includes("INVALID")
+                        ? "Batch not found in registry"
+                        : result.status.replaceAll("_", " ")}
+                </div>
                 <div
                   className={`result-card status-${result.status.toLowerCase()}`}
                 >

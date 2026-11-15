@@ -57,6 +57,14 @@ export function AdminShell({ children }: Readonly<{ children: React.ReactNode }>
             })}
           </nav>
         </aside>
+        {menuOpen && (
+          <button
+            type="button"
+            className="admin-sidebar-backdrop"
+            aria-label="Close admin navigation"
+            onClick={() => setMenuOpen(false)}
+          />
+        )}
         <main className="dashboard-main admin-route-main">{children}</main>
       </div>
     </div>

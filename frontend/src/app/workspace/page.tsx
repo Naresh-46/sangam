@@ -93,7 +93,7 @@ function BatchQrLabel({ batch }: { batch: Batch }) {
       <div className="batch-print-label" id={`batch-label-${batch.id}`}>
         <QRCodeSVG value={qrUrl} size={150} marginSize={1} />
         <div>
-          <p className="batch-label-brand">ANANTA · MEDICINE TRACEABILITY</p>
+          <p className="batch-label-brand">SANGAM · MEDICINE TRACEABILITY</p>
           <h1>{batch.batchNumber}</h1>
           <p>{batch.medicineName}</p>
           <p>Manufacturer: {batch.manufacturer}</p>
@@ -622,7 +622,7 @@ export default function OrganizationWorkspace() {
                 onChange={(e) => setInventoryQuery(e.target.value)}
               />
               {batches.length ? (
-                <div className="table-wrap">
+                <div className="table-wrap inventory-table-wrap">
                   <table>
                     <thead>
                       <tr>
@@ -702,6 +702,7 @@ export default function OrganizationWorkspace() {
       {transferBatch && (
         <div className="transfer-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTransferBatch(null); }}>
           <section className="transfer-modal" role="dialog" aria-modal="true" aria-labelledby="transfer-title">
+            <button type="button" className="modal-close" aria-label="Close transfer dialog" onClick={() => setTransferBatch(null)}>×</button>
             <div className="eyebrow">WHOLE BATCH CUSTODY</div>
             <h2 id="transfer-title">Transfer {transferBatch.batchNumber}</h2>
             <p className="muted">The recipient becomes the holder after confirming delivery.</p>
@@ -723,6 +724,7 @@ export default function OrganizationWorkspace() {
       {teamModalOpen && me?.organization && (
         <div className="transfer-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTeamModalOpen(false); }}>
           <section className="transfer-modal" role="dialog" aria-modal="true" aria-labelledby="team-modal-title">
+            <button type="button" className="modal-close" aria-label="Close team member dialog" onClick={() => setTeamModalOpen(false)}>×</button>
             <div className="eyebrow">ORGANIZATION ACCESS</div>
             <h2 id="team-modal-title">Add team member</h2>
             <p className="muted">A secure temporary password will be generated after the account is created.</p>

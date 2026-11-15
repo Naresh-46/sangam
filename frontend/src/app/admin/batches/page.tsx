@@ -115,7 +115,7 @@ export default function BatchesPage() {
             </select>
           </div>
           {visibleBatches.length ? (
-            <div className="table-wrap">
+            <div className="table-wrap admin-batch-table-wrap">
               <table>
                 <thead><tr><th>Medicine / batch</th><th>Manufacturer</th><th>Recorded holder</th><th>Expiry</th><th>Completeness</th><th>Action</th><th>Custody</th></tr></thead>
                 <tbody>{visibleBatches.map((batch) => (
