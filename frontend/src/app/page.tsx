@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import { api } from "@/lib/api";
 
 type Verification = {
@@ -153,6 +154,10 @@ export default function PublicVerification() {
                 Check record <span>↗</span>
               </button>
             </form>
+            <div className="consumer-signin">
+              <p>Want to save lookups and receive recall alerts when available?</p>
+              <GoogleSignInButton />
+            </div>
             {error && <div className="message failure">{error}</div>}
             {result && (
               <div

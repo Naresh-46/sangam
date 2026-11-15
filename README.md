@@ -23,6 +23,8 @@ You need Node.js 20.11 or later, npm, and Docker with Compose.
 
 3. In `backend/.env`, set `JWT_SECRET` and `BOOTSTRAP_TOKEN` to long random values. For example, generate values with `openssl rand -hex 32`. Put the same `JWT_SECRET` in `frontend/.env.local`. Keep these files private; they are for local development.
 
+   To enable consumer Google sign-in, set `GOOGLE_CLIENT_ID` in both env files, `GOOGLE_CLIENT_SECRET` in `backend/.env`, and the same `GOOGLE_REDIRECT_URI` in both files. Register that redirect URI in the Google OAuth client. Google sign-in is unavailable until these values are configured.
+
 4. Install packages and prepare the database:
 
    ```sh
@@ -52,7 +54,7 @@ You need Node.js 20.11 or later, npm, and Docker with Compose.
 ## Folder map
 
 - `frontend/src/app/` — public page, login, dashboards, and Next.js route handlers.
-- `frontend/src/app/api/` — same-origin routes for login and forwarding browser API calls to Fastify.
+- `frontend/src/app/api/` — same-origin routes for login, Google OAuth, and forwarding browser API calls to Fastify.
 - `frontend/src/components/` — shared interface components.
 - `frontend/src/lib/` — browser API helper.
 - `frontend/src/middleware.ts` — redirects unauthenticated users away from protected pages.

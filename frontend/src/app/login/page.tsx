@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { SiteHeader } from "@/components/SiteHeader";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 
 type LoginResponse = {
   user?: {
@@ -18,11 +19,12 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [expired, setExpired] = useState(false);
+  const [googleError, setGoogleError] = useState(false);
 
   useEffect(() => {
-    setExpired(
-      new URLSearchParams(window.location.search).get("expired") === "1",
-    );
+    const params = new URLSearchParams(window.location.search);
+    setExpired(params.get("expired") === "1");
+    setGoogleError(params.get("error") === "google");
   }, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -77,8 +79,8 @@ export default function LoginPage() {
           <div className="eyebrow">AUTHORIZED ACCESS</div>
           <h1 className="page-title">Sign in to your workspace</h1>
           <p className="muted">
-            Regulator and approved supply-chain organization accounts use this
-            sign-in.
+            Regulator and approved organization accounts can use email and password.
+            Consumers can sign in with Google.
           </p>
 
           {expired && (
@@ -125,6 +127,17 @@ export default function LoginPage() {
               {!busy && <span>→</span>}
             </button>
           </form>
+
+          {googleError && (
+            <p className="message failure" role="alert">
+              Google sign-in could not be completed. Please try again.
+            </p>
+          )}
+          <div className="login-google">
+            <div className="login-divider"><span>or</span></div>
+            <GoogleSignInButton />
+            <p className="muted">Consumers can sign in to save lookups. Batch verification remains public.</p>
+          </div>
 
           <p className="help-note">
             Need an organization account? Contact your regulator administrator.

@@ -16,7 +16,7 @@ const app = Fastify({ logger: true, bodyLimit: 64 * 1024, trustProxy: trustedPro
 const scrypt = promisify(scryptCallback);
 
 declare module '@fastify/jwt' {
-  interface FastifyJWT { payload: { sub: string; role: 'REGULATOR' | 'ORGANIZATION' }; user: { sub: string; role: 'REGULATOR' | 'ORGANIZATION' } }
+  interface FastifyJWT { payload: { sub: string; role: 'REGULATOR' | 'ORGANIZATION' | 'CONSUMER' }; user: { sub: string; role: 'REGULATOR' | 'ORGANIZATION' | 'CONSUMER' } }
 }
 
 await app.register(helmet, {
@@ -141,6 +141,95 @@ app.post('/auth/login', { config: { rateLimit: { max: 5, timeWindow: '15 minutes
   const accessToken = app.jwt.sign({ sub: user.id, role: user.role });
   return { accessToken, tokenType: 'Bearer', expiresIn: env.TOKEN_MINUTES * 60,
     user: { role: user.role } };
+});
+
+app.post('/auth/google/callback', { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } } }, async (request, reply) => {
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
+    throw error(503, 'Google sign-in is not configured');
+  }
+  const { code, codeVerifier } = parse(z.object({
+    code: z.string().min(1).max(2048),
+    codeVerifier: z.string().min(43).max(128).regex(/^[A-Za-z0-9._~-]+$/),
+  }), request.body);
+  const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code,
+      client_id: env.GOOGLE_CLIENT_ID,
+      client_secret: env.GOOGLE_CLIENT_SECRET,
+      redirect_uri: env.GOOGLE_REDIRECT_URI,
+      grant_type: 'authorization_code',
+      code_verifier: codeVerifier,
+    }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!tokenResponse.ok) {
+    app.log.warn({ status: tokenResponse.status }, 'Google authorization code exchange failed');
+    throw error(401, 'Google sign-in could not be completed');
+  }
+  const tokens: unknown = await tokenResponse.json();
+  const accessToken = z.object({ access_token: z.string().min(1) }).safeParse(tokens);
+  if (!accessToken.success) throw error(401, 'Google sign-in returned an invalid token response');
+
+  const profileResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+    headers: { Authorization: `Bearer ${accessToken.data.access_token}` },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!profileResponse.ok) {
+    app.log.warn({ status: profileResponse.status }, 'Google user profile verification failed');
+    throw error(401, 'Google account could not be verified');
+  }
+  const profile = z.object({
+    sub: z.string().min(1),
+    email: emailSchema,
+    email_verified: z.boolean(),
+    name: z.string().trim().min(1).max(160).optional(),
+  }).safeParse(await profileResponse.json());
+  if (!profile.success || !profile.data.email_verified) {
+    throw error(401, 'Google account email is not verified');
+  }
+
+  const email = profile.data.email.toLowerCase();
+  try {
+    const user = await prisma.$transaction(async tx => {
+      const byGoogleId = await tx.user.findUnique({ where: { googleId: profile.data.sub } });
+      if (byGoogleId) {
+        if (!byGoogleId.active) throw error(403, 'Account is inactive');
+        return byGoogleId;
+      }
+
+      const byEmail = await tx.user.findUnique({ where: { email } });
+      if (byEmail) {
+        if (!byEmail.active) throw error(403, 'Account is inactive');
+        return tx.user.update({
+          where: { id: byEmail.id },
+          data: { googleId: profile.data.sub, name: byEmail.name ?? profile.data.name },
+        });
+      }
+
+      return tx.user.create({
+        data: {
+          email,
+          name: profile.data.name,
+          googleId: profile.data.sub,
+          passwordHash: null,
+          role: 'CONSUMER',
+        },
+      });
+    });
+    const token = app.jwt.sign({ sub: user.id, role: user.role });
+    return reply.send({
+      token,
+      expiresIn: env.TOKEN_MINUTES * 60,
+      user: { id: user.id, email: user.email, name: user.name, role: user.role },
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw error(409, 'This Google account is already linked to another user');
+    }
+    throw err;
+  }
 });
 
 app.get('/auth/me', { preHandler: [app.authenticate] }, async (request) => {
