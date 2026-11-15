@@ -75,6 +75,7 @@ model Batch {
   expiryDate            DateTime               @db.Date
   quantity              Int
   commonUse             String?
+  genericName           String?
   manufacturerId        String                 @db.Uuid
   manufacturer          Organization           @relation("Manufacturer", fields: [manufacturerId], references: [id], onDelete: Restrict)
   currentHolderId       String                 @db.Uuid

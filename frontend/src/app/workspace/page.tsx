@@ -233,10 +233,12 @@ export default function OrganizationWorkspace() {
     await action(async () => {
       const data = new FormData(element);
       const commonUse = data.get("commonUse")?.toString().trim();
+      const genericName = data.get("genericName")?.toString().trim();
       const payload = {
         medicineName: data.get("medicineName"),
         strength: data.get("strength"),
         ...(commonUse ? { commonUse } : {}),
+        ...(genericName ? { genericName } : {}),
         batchNumber: data.get("batchNumber"),
         expiryDate: data.get("expiryDate"),
         quantity: Number(data.get("quantity")),
@@ -554,6 +556,14 @@ export default function OrganizationWorkspace() {
                       <input
                         name="commonUse"
                         placeholder="e.g., Fever, mild to moderate pain"
+                      />
+                    </label>
+                    <label>
+                      Generic name <span className="optional">optional</span>
+                      <input
+                        name="genericName"
+                        placeholder="e.g., Paracetamol, Ibuprofen"
+                        maxLength={160}
                       />
                     </label>
                     <div className="two-col">

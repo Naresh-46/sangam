@@ -11,6 +11,7 @@ type Verification = {
   medicineName?: string;
   strength?: string;
   commonUse?: string | null;
+  genericName?: string | null;
   batchNumber?: string;
   expiryDate?: string;
   manufacturer?: string;
@@ -23,15 +24,59 @@ type Verification = {
     chainStatus: "VERIFIED" | "PENDING" | "INTEGRITY_MISMATCH";
   }[];
 };
+type MedicineInfo = {
+  title: string;
+  extract: string | null;
+  url: string | null;
+};
 
 function loadVerification(batchId: string) {
   return api<Verification>(`/verify/${encodeURIComponent(batchId)}`);
+}
+
+function firstSentences(text: string, count = 3) {
+  return (text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [text])
+    .slice(0, count)
+    .join(" ")
+    .trim();
 }
 
 export default function PublicVerification() {
   const [id, setId] = useState("");
   const [result, setResult] = useState<Verification | null>(null);
   const [error, setError] = useState("");
+  const [medicineInfo, setMedicineInfo] = useState<MedicineInfo | null>(null);
+  const [medicineInfoLoading, setMedicineInfoLoading] = useState(false);
+
+  useEffect(() => {
+    const genericName = result?.genericName?.trim();
+    if (!genericName) {
+      setMedicineInfo(null);
+      setMedicineInfoLoading(false);
+      return;
+    }
+
+    let active = true;
+    setMedicineInfo(null);
+    setMedicineInfoLoading(true);
+    api<MedicineInfo>(`/medicine-info/${encodeURIComponent(genericName)}`, {
+      signal: AbortSignal.timeout(6_000),
+    })
+      .then((data) => {
+        if (active) setMedicineInfo(data);
+      })
+      .catch(() => {
+        if (active) setMedicineInfo(null);
+      })
+      .finally(() => {
+        if (active) setMedicineInfoLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [result?.genericName]);
+
   useEffect(() => {
     const batchId = new URLSearchParams(window.location.search)
       .get("batch")
@@ -160,71 +205,92 @@ export default function PublicVerification() {
             </div>
             {error && <div className="message failure">{error}</div>}
             {result && (
-              <div
-                className={`result-card status-${result.status.toLowerCase()}`}
-              >
-                <div className="result-head">
-                  <span className="status-dot" />
-                  <strong>{result.status.replaceAll("_", " ")}</strong>
-                  <span className="result-caption">Registry record</span>
-                </div>
-                {result.medicineName && (
-                  <>
-                    <h3>
-                      {result.medicineName} <span>{result.strength}</span>
-                    </h3>
-                    {result.commonUse?.trim() && (
-                      <p className="common-use-note">
-                        Common use: {result.commonUse.trim()}
-                      </p>
-                    )}
-                    <div className="result-grid">
-                      <div>
-                        <small>BATCH NUMBER</small>
-                        <b>{result.batchNumber}</b>
+              <>
+                <div
+                  className={`result-card status-${result.status.toLowerCase()}`}
+                >
+                  <div className="result-head">
+                    <span className="status-dot" />
+                    <strong>{result.status.replaceAll("_", " ")}</strong>
+                    <span className="result-caption">Registry record</span>
+                  </div>
+                  {result.medicineName && (
+                    <>
+                      <h3>
+                        {result.medicineName} <span>{result.strength}</span>
+                      </h3>
+                      {result.commonUse?.trim() && (
+                        <p className="common-use-note">
+                          Common use: {result.commonUse.trim()}
+                        </p>
+                      )}
+                      <div className="result-grid">
+                        <div>
+                          <small>BATCH NUMBER</small>
+                          <b>{result.batchNumber}</b>
+                        </div>
+                        <div>
+                          <small>EXPIRY DATE</small>
+                          <b>{result.expiryDate}</b>
+                        </div>
+                        <div>
+                          <small>MANUFACTURER</small>
+                          <b>{result.manufacturer}</b>
+                        </div>
+                        <div>
+                          <small>RECORDED HOLDER</small>
+                          <b>{result.currentHolder}</b>
+                        </div>
                       </div>
-                      <div>
-                        <small>EXPIRY DATE</small>
-                        <b>{result.expiryDate}</b>
-                      </div>
-                      <div>
-                        <small>MANUFACTURER</small>
-                        <b>{result.manufacturer}</b>
-                      </div>
-                      <div>
-                        <small>RECORDED HOLDER</small>
-                        <b>{result.currentHolder}</b>
-                      </div>
-                    </div>
-                    {result.custodyHistory?.map((event, i) => (
-                      <div className="timeline-item" key={i}>
-                        <i />
-                        <span>
-                          <b>
-                            {event.event.replaceAll("_", " ").toLowerCase()}
-                          </b>
-                          <small>
-                            {event.details} ·{" "}
-                            {new Date(event.at).toLocaleString()}
-                          </small>
-                          <span className={`chain-status chain-${event.chainStatus.toLowerCase()}`}>
-                            {event.chainStatus === "VERIFIED"
-                              ? "Chain-verified ✓"
-                              : event.chainStatus === "INTEGRITY_MISMATCH"
-                                ? "Integrity check failed"
-                                : "Pending chain confirmation"}
+                      {result.custodyHistory?.map((event, i) => (
+                        <div className="timeline-item" key={i}>
+                          <i />
+                          <span>
+                            <b>
+                              {event.event.replaceAll("_", " ").toLowerCase()}
+                            </b>
+                            <small>
+                              {event.details} ·{" "}
+                              {new Date(event.at).toLocaleString()}
+                            </small>
+                            <span className={`chain-status chain-${event.chainStatus.toLowerCase()}`}>
+                              {event.chainStatus === "VERIFIED"
+                                ? "Chain-verified ✓"
+                                : event.chainStatus === "INTEGRITY_MISMATCH"
+                                  ? "Integrity check failed"
+                                  : "Pending chain confirmation"}
+                            </span>
                           </span>
-                        </span>
-                      </div>
-                    ))}
-                  </>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  <p className="record-notice">
+                    {result.notice ||
+                      result.message ||
+                      "No registered batch matches this identifier."}
+                  </p>
+                </div>
+                {result.genericName?.trim() && (medicineInfoLoading || medicineInfo) && (
+                  <section className={`medicine-info-card${medicineInfoLoading ? " medicine-info-loading" : ""}`} aria-label="Medicine information">
+                    {medicineInfoLoading ? (
+                      <>
+                        <span className="medicine-info-skeleton medicine-info-title-skeleton" />
+                        <span className="medicine-info-skeleton" />
+                        <span className="medicine-info-skeleton medicine-info-short-skeleton" />
+                      </>
+                    ) : medicineInfo && (
+                      <>
+                        <div className="eyebrow">MEDICINE INFO</div>
+                        <h3>{medicineInfo.title}</h3>
+                        <p>{medicineInfo.extract ? firstSentences(medicineInfo.extract) : "No additional information available."}</p>
+                        {medicineInfo.url && <a href={medicineInfo.url} target="_blank" rel="noopener noreferrer">Read full details →</a>}
+                        <small>Source: Wikipedia</small>
+                      </>
+                    )}
+                  </section>
                 )}
-                <p className="record-notice">
-                  {result.notice ||
-                    result.message ||
-                    "No registered batch matches this identifier."}
-                </p>
-              </div>
+              </>
             )}
           </div>
         </section>

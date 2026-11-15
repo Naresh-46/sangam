@@ -41,6 +41,9 @@ const organizationSubRoles = ['ORG_ADMIN', 'OPERATOR', 'VIEWER'] as const;
 const memberSubRoles = ['OPERATOR', 'VIEWER'] as const;
 const parse = <T extends z.ZodTypeAny>(schema: T, value: unknown): z.infer<T> => schema.parse(value);
 const error = (statusCode: number, message: string) => Object.assign(new Error(message), { statusCode });
+type MedicineInfo = { title: string; extract: string | null; url: string | null };
+const medicineInfoCache = new Map<string, { data: MedicineInfo; timestamp: number }>();
+const medicineInfoCacheTtl = 60 * 60 * 1000;
 function custodyCompleteness(confirmedTransfers: number, pendingTransfers: number) {
   return Math.round(((confirmedTransfers + 1) / (confirmedTransfers + pendingTransfers + 1)) * 100);
 }
@@ -513,6 +516,7 @@ app.post('/batches', { preHandler: [app.authenticate] }, async (request, reply) 
   const body = parse(z.object({ medicineName: z.string().trim().min(1).max(160), strength: z.string().trim().min(1).max(80),
     batchNumber: z.string().trim().min(1).max(100), expiryDate: z.coerce.date(), quantity: z.number().int().positive(),
     commonUse: z.string().trim().optional(),
+    genericName: z.string().trim().max(160).optional(),
     documentSha256: z.string().regex(/^[a-f\d]{64}$/i).optional() }), request.body);
   if (body.expiryDate < new Date(new Date().toISOString().slice(0, 10))) throw error(422, 'Expiry date must be today or later');
   const created = await prisma.$transaction(async tx => {
@@ -524,7 +528,7 @@ app.post('/batches', { preHandler: [app.authenticate] }, async (request, reply) 
   const batch = created.batch;
   return reply.code(201).send({ id: batch.id, medicineName: batch.medicineName, batchNumber: batch.batchNumber,
     expiryDate: batch.expiryDate.toISOString().slice(0, 10), quantity: batch.quantity,
-    commonUse: batch.commonUse });
+    commonUse: batch.commonUse, genericName: batch.genericName });
 });
 
 app.get('/batches', { preHandler: [app.authenticate] }, async (request) => {
@@ -861,6 +865,49 @@ app.post('/recalls/:recallId/acknowledge', { preHandler: [app.authenticate] }, a
   return result.acknowledgment;
 });
 
+app.get('/medicine-info/:name', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async request => {
+  const { name } = parse(z.object({ name: z.string().trim().min(1).max(160) }), request.params);
+  const key = name.toLocaleLowerCase();
+  const cached = medicineInfoCache.get(key);
+  if (cached && Date.now() - cached.timestamp < medicineInfoCacheTtl) return cached.data;
+
+  const fallback: MedicineInfo = { title: name, extract: null, url: null };
+  let data = fallback;
+  try {
+    const response = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`, {
+      headers: { 'User-Agent': 'SANGAM-Tracker/1.0' },
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (response.ok) {
+      const summary: unknown = await response.json();
+      const parsed = z.object({
+        title: z.string().optional(),
+        extract: z.string().nullable().optional(),
+        content_urls: z.object({
+          desktop: z.object({ page: z.string().url().optional() }).optional(),
+          mobile: z.object({ page: z.string().url().optional() }).optional(),
+        }).optional(),
+      }).safeParse(summary);
+      if (parsed.success) {
+        data = {
+          title: parsed.data.title?.trim() || name,
+          extract: parsed.data.extract?.trim() || null,
+          url: parsed.data.content_urls?.desktop?.page ?? parsed.data.content_urls?.mobile?.page ?? null,
+        };
+      }
+    }
+  } catch (err) {
+    request.log.warn({ err, name }, 'Wikipedia medicine summary lookup failed');
+  }
+
+  if (medicineInfoCache.size >= 500) {
+    const oldestKey = medicineInfoCache.keys().next().value;
+    if (oldestKey) medicineInfoCache.delete(oldestKey);
+  }
+  medicineInfoCache.set(key, { data, timestamp: Date.now() });
+  return data;
+});
+
 app.get('/verify/:batchId', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (request) => {
   const { batchId } = parse(z.object({ batchId: idSchema }), request.params);
   const batch = await prisma.batch.findUnique({ where: { id: batchId }, include: {
@@ -893,6 +940,7 @@ app.get('/verify/:batchId', { config: { rateLimit: { max: 30, timeWindow: '1 min
     };
   }));
   return { status, medicineName: batch.medicineName, strength: batch.strength, commonUse: batch.commonUse,
+    genericName: batch.genericName,
     batchNumber: batch.batchNumber,
     expiryDate: batch.expiryDate.toISOString().slice(0, 10), manufacturer: batch.manufacturer.name,
     currentHolder: batch.currentHolder.name,
