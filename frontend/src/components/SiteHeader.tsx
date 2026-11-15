@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-export function SiteHeader({ area }: { area: 'public' | 'admin' | 'organization' }) {
+export function SiteHeader({ area }: { area: 'public' | 'admin' | 'organization' | 'consumer' }) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const logout = async () => {
@@ -38,6 +38,9 @@ export function SiteHeader({ area }: { area: 'public' | 'admin' | 'organization'
               <Link href="/workspace" onClick={() => setMenuOpen(false)}>Inventory</Link>
               <a href="/workspace#transfers" onClick={() => setMenuOpen(false)}>Transfers</a>
             </>
+          )}
+          {area === 'consumer' && (
+            <Link href="/" onClick={() => setMenuOpen(false)}>Public lookup</Link>
           )}
           <button className="signout" onClick={logout}>Sign out</button>
         </nav>

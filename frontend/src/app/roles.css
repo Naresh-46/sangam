@@ -1724,6 +1724,400 @@ td small {
     display: none;
   }
 }
+
+.consumer-lookup {
+  width: min(100% - 2rem, 820px);
+  margin: 0 auto;
+  padding: 3rem 0 5rem;
+}
+.consumer-lookup-intro {
+  margin: 0 auto 2rem;
+  max-width: 680px;
+  text-align: center;
+}
+.consumer-lookup-intro .eyebrow {
+  color: var(--color-primary);
+}
+.consumer-lookup-intro h1 {
+  margin: 1rem 0;
+  color: var(--color-text);
+  font-size: clamp(2.2rem, 7vw, 3.75rem);
+  line-height: 1.05;
+  letter-spacing: -0.05em;
+}
+.consumer-lookup-intro h1 em {
+  color: var(--color-primary);
+  font-family: Georgia, serif;
+  font-weight: 500;
+}
+.consumer-lookup-intro > p {
+  max-width: 570px;
+  margin: 0 auto;
+  color: var(--color-text-secondary);
+  line-height: 1.7;
+}
+.consumer-lookup-card,
+.consumer-record-card,
+.consumer-wikipedia-card,
+.consumer-result-loading {
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow);
+}
+.consumer-lookup-card {
+  padding: 1.25rem;
+}
+.consumer-lookup-card-heading {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 1.25rem;
+}
+.consumer-lookup-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  border-radius: 12px;
+  background: #e8f4f5;
+  color: var(--color-primary);
+  font-size: 1.7rem;
+}
+.consumer-lookup-card-heading h2 {
+  margin: 0 0 0.25rem;
+  color: var(--color-text);
+  font-size: 1.15rem;
+}
+.consumer-lookup-card-heading p,
+.consumer-scanner p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+}
+.consumer-scan-button,
+.consumer-lookup-form button,
+.consumer-scanner .secondary {
+  min-height: 48px;
+  border-radius: 8px;
+}
+.consumer-scan-button {
+  width: 100%;
+}
+.consumer-scan-button span {
+  margin-right: 0.5rem;
+  font-size: 1.1rem;
+}
+.consumer-scanner {
+  display: grid;
+  justify-items: center;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: #f8fafb;
+}
+.consumer-scanner-video {
+  width: 100%;
+  max-height: 340px;
+  border-radius: 8px;
+  background: #0f172a;
+  object-fit: cover;
+}
+.consumer-scanner .secondary {
+  width: 100%;
+}
+.consumer-scanner-message {
+  margin: 0.75rem 0 0;
+  color: var(--color-warning);
+  font-size: 0.875rem;
+}
+.consumer-lookup-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin: 1.5rem 0;
+  color: var(--color-text-secondary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+.consumer-lookup-divider::before,
+.consumer-lookup-divider::after {
+  height: 1px;
+  flex: 1;
+  background: var(--color-border);
+  content: "";
+}
+.consumer-lookup-form {
+  display: grid;
+  gap: 0.6rem;
+}
+.consumer-lookup-form label {
+  color: var(--color-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.consumer-lookup-form input {
+  width: 100%;
+  min-height: 48px;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 16px;
+}
+.consumer-lookup-form input:focus {
+  border-color: var(--color-primary);
+  outline: 3px solid rgb(13 115 119 / 12%);
+}
+.consumer-lookup-form button {
+  width: 100%;
+  margin-top: 0.35rem;
+}
+.consumer-result-section {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+.consumer-result-banner {
+  display: flex;
+  gap: 0.85rem;
+  align-items: flex-start;
+  padding: 1rem;
+  border: 1px solid transparent;
+  border-radius: 12px;
+}
+.consumer-result-banner > span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 70%);
+  font-weight: 800;
+}
+.consumer-result-banner strong {
+  display: block;
+  margin: 0.1rem 0 0.25rem;
+}
+.consumer-result-banner p {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+.consumer-result-banner.is-found {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+.consumer-result-banner.is-recalled,
+.consumer-record-status.is-recalled {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+.consumer-result-banner.is-not-found {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+.consumer-record-card,
+.consumer-wikipedia-card {
+  padding: 1.25rem;
+}
+.consumer-record-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+.consumer-record-header h2,
+.consumer-wikipedia-card h2 {
+  margin: 0.55rem 0 0;
+  color: var(--color-text);
+  font-size: 1.35rem;
+}
+.consumer-record-header h2 span {
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+.consumer-record-status {
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.consumer-record-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  margin: 1.2rem 0 0;
+  border-top: 1px solid var(--color-border);
+}
+.consumer-record-grid > div {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.consumer-record-grid dt {
+  margin-bottom: 0.25rem;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+}
+.consumer-record-grid dd {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 0.925rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.consumer-common-use,
+.consumer-record-notice {
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+.consumer-record-notice {
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: #f8fafb;
+}
+.consumer-custody {
+  margin-top: 1.5rem;
+}
+.consumer-custody h3 {
+  margin: 0 0 1rem;
+  color: var(--color-text);
+  font-size: 1rem;
+}
+.consumer-custody-item {
+  position: relative;
+  display: flex;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+}
+.consumer-custody-item:not(:last-child)::before {
+  position: absolute;
+  top: 0.55rem;
+  bottom: -0.05rem;
+  left: 0.3rem;
+  width: 1px;
+  background: var(--color-border);
+  content: "";
+}
+.consumer-custody-dot {
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  margin-top: 0.25rem;
+  border-radius: 50%;
+  background: var(--color-warning);
+}
+.consumer-custody-dot.chain-verified {
+  background: var(--color-success);
+}
+.consumer-custody-dot.chain-integrity_mismatch {
+  background: var(--color-danger);
+}
+.consumer-custody-item strong {
+  color: var(--color-text);
+  font-size: 0.85rem;
+  text-transform: capitalize;
+}
+.consumer-custody-item p {
+  margin: 0.2rem 0;
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+}
+.consumer-custody-item small {
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+}
+.consumer-wikipedia-card {
+  background: #f1f8f8;
+}
+.consumer-wikipedia-card h2 {
+  margin-bottom: 0.65rem;
+}
+.consumer-wikipedia-card > p {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+.consumer-wikipedia-card a {
+  color: var(--color-primary);
+  font-weight: 700;
+  text-decoration: none;
+}
+.consumer-wikipedia-card > small {
+  display: block;
+  margin-top: 1rem;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+}
+.consumer-wikipedia-loading,
+.consumer-result-loading {
+  color: var(--color-text-secondary);
+}
+.consumer-result-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+  padding: 1rem;
+}
+.consumer-loading-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  box-shadow: 0 0 0 5px #e8f4f5;
+}
+@media (min-width: 768px) {
+  .consumer-lookup {
+    width: min(100% - 3rem, 820px);
+    padding-top: 4rem;
+  }
+  .consumer-lookup-card,
+  .consumer-record-card,
+  .consumer-wikipedia-card {
+    padding: 1.5rem;
+  }
+  .consumer-scan-button,
+  .consumer-scanner .secondary {
+    width: auto;
+    min-width: 220px;
+  }
+  .consumer-lookup-form {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+  }
+  .consumer-lookup-form label {
+    grid-column: 1 / -1;
+  }
+  .consumer-lookup-form button {
+    min-width: 150px;
+    margin: 0;
+  }
+  .consumer-record-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.5rem;
+  }
+}
+@media (min-width: 1024px) {
+  .consumer-lookup {
+    padding-top: 4.5rem;
+  }
+}
 .filter-input {
   width: 100%;
   margin-top: 13px;

@@ -55,7 +55,7 @@ export async function GET(request: NextRequest) {
       ? "/workspace"
       : session.user.role === "REGULATOR"
         ? "/admin"
-        : "/";
+        : "/consumer";
     const response = clearOAuthCookies(NextResponse.redirect(new URL(destination, request.url)));
     response.cookies.set("ananta_session", session.token, {
       httpOnly: true,

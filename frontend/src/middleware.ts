@@ -5,9 +5,10 @@ export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const isAdmin = pathname.startsWith('/admin');
   const isWorkspace = pathname.startsWith('/workspace');
+  const isConsumer = pathname.startsWith('/consumer');
   const nextResponse = () => NextResponse.next();
 
-  if (isAdmin || isWorkspace) {
+  if (isAdmin || isWorkspace || isConsumer) {
     const token = request.cookies.get('ananta_session')?.value;
     let role: string | undefined;
     const configuredSecret = process.env.JWT_SECRET;
@@ -18,9 +19,12 @@ export async function middleware(request: NextRequest) {
       } catch { /* Invalid or expired session: send the visitor to sign in. */ }
     }
 
-    const expectedRole = isAdmin ? 'REGULATOR' : 'ORGANIZATION';
+    const expectedRole = isAdmin ? 'REGULATOR' : isWorkspace ? 'ORGANIZATION' : 'CONSUMER';
     if (role !== expectedRole) {
-      const destination = new URL(role === 'REGULATOR' ? '/admin' : role === 'ORGANIZATION' ? '/workspace' : '/login', request.url);
+      const destination = new URL(
+        role === 'REGULATOR' ? '/admin' : role === 'ORGANIZATION' ? '/workspace' : role === 'CONSUMER' ? '/consumer' : '/login',
+        request.url,
+      );
       if (!role) destination.searchParams.set('next', `${pathname}${search}`);
       return NextResponse.redirect(destination);
     }
