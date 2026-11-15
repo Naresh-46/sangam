@@ -32,8 +32,19 @@ type ActiveRecall = {
   status: "PENDING" | "ACKNOWLEDGED";
   acknowledgedAt: string | null;
 };
-type Me = {
+type OrganizationSubRole = "ORG_ADMIN" | "OPERATOR" | "VIEWER";
+type TeamMember = {
+  id: string;
+  name: string | null;
   email: string;
+  subRole: OrganizationSubRole;
+  active: boolean;
+};
+type Me = {
+  id: string;
+  email: string;
+  name: string | null;
+  subRole: OrganizationSubRole;
   organization: {
     id: string;
     name: string;
@@ -100,6 +111,9 @@ export default function OrganizationWorkspace() {
   const [recallLoading, setRecallLoading] = useState(true);
   const [acknowledgingRecallId, setAcknowledgingRecallId] = useState<string | null>(null);
   const [partners, setPartners] = useState<Partner[]>([]);
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  const [teamModalOpen, setTeamModalOpen] = useState(false);
+  const [createdTemporaryPassword, setCreatedTemporaryPassword] = useState("");
   const [transferBatch, setTransferBatch] = useState<Batch | null>(null);
   const [custodyOpenId, setCustodyOpenId] = useState<string | null>(null);
   const [custodyByBatch, setCustodyByBatch] = useState<Record<string, CustodyTransfer[]>>({});
@@ -123,16 +137,20 @@ export default function OrganizationWorkspace() {
     );
     setMe(who);
     if (!who.organization?.approved) return;
-    const [stock, transfers, orgs, recalls] = await Promise.all([
+    const [stock, transfers, orgs, recalls, members] = await Promise.all([
       api<Batch[]>("/batches"),
       api<Incoming[]>("/transfers/incoming"),
       api<Partner[]>("/organizations/active"),
       api<ActiveRecall[]>("/recalls/active"),
+      who.subRole === "ORG_ADMIN"
+        ? api<TeamMember[]>(`/admin/organizations/${who.organization.id}/users`)
+        : Promise.resolve([]),
     ]);
     setBatches(stock);
     setIncoming(transfers);
     setPartners(orgs);
     setActiveRecalls(recalls);
+    setTeam(members);
     setRecallLoading(false);
   };
   useEffect(() => {
@@ -151,6 +169,61 @@ export default function OrganizationWorkspace() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Request failed.");
     }
+  };
+  const addTeamMember = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const element = event.currentTarget;
+    await action(async () => {
+      const form = new FormData(element);
+      const created = await api<TeamMember & { temporaryPassword: string }>(
+        `/admin/organizations/${me?.organization?.id}/users`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            email: form.get("email"),
+            name: form.get("name"),
+            subRole: form.get("subRole"),
+          }),
+        },
+      );
+      setCreatedTemporaryPassword(created.temporaryPassword);
+      setNotice(`Added ${created.name || created.email}. Share the temporary password securely.`);
+      element.reset();
+      setTeamModalOpen(false);
+      await load();
+    });
+  };
+  const updateOrganizationProfile = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    await action(async () => {
+      const form = new FormData(formElement);
+      const name = form.get("organizationName")?.toString().trim();
+      await api(`/admin/organizations/${me?.organization?.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      });
+      setNotice("Organization profile updated.");
+      await load();
+    });
+  };
+  const changeTeamRole = (member: TeamMember, subRole: OrganizationSubRole) =>
+    action(async () => {
+      const updated = await api<TeamMember>(
+        `/admin/organizations/${me?.organization?.id}/users/${member.id}`,
+        { method: "PATCH", body: JSON.stringify({ subRole }) },
+      );
+      setTeam((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setNotice(`Updated ${updated.name || updated.email} to ${updated.subRole.replace("_", " ")}.`);
+      await load();
+    });
+  const removeTeamMember = (member: TeamMember) => {
+    if (!window.confirm(`Remove ${member.name || member.email} from your organization?`)) return;
+    void action(async () => {
+      await api(`/admin/organizations/${me?.organization?.id}/users/${member.id}`, { method: "DELETE" });
+      setTeam((current) => current.filter((item) => item.id !== member.id));
+      setNotice(`${member.name || member.email} was removed from the organization.`);
+    });
   };
   const registerBatch = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -266,9 +339,10 @@ export default function OrganizationWorkspace() {
               {me?.organization?.kind?.toLowerCase()} account · {me?.email}
             </p>
           </div>
-          <button className="secondary" onClick={() => action(load)}>
-            ↻ Refresh
-          </button>
+          <div className="workspace-heading-actions">
+            {me?.subRole === "VIEWER" && <span className="badge read-only-badge">Read-only access</span>}
+            <button className="secondary" onClick={() => action(load)}>↻ Refresh</button>
+          </div>
         </div>
         {notice && <div className="message success">{notice}</div>}
         {error && <div className="message failure">{error}</div>}
@@ -287,6 +361,71 @@ export default function OrganizationWorkspace() {
           </div>
         ) : (
           <>
+            {me.subRole === "ORG_ADMIN" && (
+              <>
+              <section className="panel team-panel">
+                <div className="eyebrow">ORGANIZATION PROFILE</div>
+                <h2>Organization details</h2>
+                <p className="muted">Update your organization name. License and organization type remain regulator-managed.</p>
+                <form className="organization-profile-form" onSubmit={(event) => void updateOrganizationProfile(event)}>
+                  <label>
+                    Organization name
+                    <input name="organizationName" defaultValue={me.organization.name} required minLength={2} maxLength={160} />
+                  </label>
+                  <button className="secondary">Save profile</button>
+                </form>
+              </section>
+              <section className="panel team-panel">
+                <div className="panel-heading">
+                  <div><div className="eyebrow">ORGANIZATION ACCESS</div><h2>Team</h2></div>
+                  <div className="row-actions">
+                    <span className="count-pill">{team.length} members</span>
+                    <button className="primary" type="button" onClick={() => { setCreatedTemporaryPassword(""); setTeamModalOpen(true); }}>Add member</button>
+                  </div>
+                </div>
+                {team.length ? (
+                  <div className="team-list">
+                    {team.map((member) => (
+                      <div className="team-member-row" key={member.id}>
+                        <div className="team-member-identity">
+                          <b>{member.name || member.email}</b>
+                          <small>{member.email}{!member.active ? " · inactive" : ""}</small>
+                        </div>
+                        <div className="team-member-actions">
+                          <label className="team-role-select">
+                            <span className="sr-only">Role for {member.name || member.email}</span>
+                            <select
+                              value={member.subRole}
+                              onChange={(event) => {
+                                const nextRole = event.target.value;
+                                if (nextRole === "ORG_ADMIN" || nextRole === "OPERATOR" || nextRole === "VIEWER") {
+                                  void changeTeamRole(member, nextRole);
+                                }
+                              }}
+                              aria-label={`Role for ${member.name || member.email}`}
+                            >
+                              <option value="ORG_ADMIN">Org Admin</option>
+                              <option value="OPERATOR">Operator</option>
+                              <option value="VIEWER">Viewer</option>
+                            </select>
+                          </label>
+                          {member.id === me.id
+                            ? <span className="badge approved">You</span>
+                            : <button className="danger-button" type="button" onClick={() => removeTeamMember(member)}>Remove</button>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : <p className="empty">No team members found.</p>}
+                {createdTemporaryPassword && (
+                  <div className="message success team-password-message" role="status">
+                    Temporary password for the new member: <code>{createdTemporaryPassword}</code>
+                    <small>Copy and share it securely. Password changes are not currently available.</small>
+                  </div>
+                )}
+              </section>
+              </>
+            )}
             <section className="panel incoming-panel">
               <div className="panel-heading">
                 <div>
@@ -306,10 +445,12 @@ export default function OrganizationWorkspace() {
                           {new Date(transfer.offeredAt).toLocaleString()}
                         </small>
                       </div>
-                      <div className="row-actions">
-                        <button type="button" className="secondary" onClick={() => acceptTransfer(transfer)}>Accept</button>
-                        <button type="button" className="danger-button" onClick={() => rejectTransfer(transfer)}>Reject</button>
-                      </div>
+                      {me.subRole === "VIEWER" ? <span className="badge read-only-badge">Read-only</span> : (
+                        <div className="row-actions">
+                          <button type="button" className="secondary" onClick={() => acceptTransfer(transfer)}>Accept</button>
+                          <button type="button" className="danger-button" onClick={() => rejectTransfer(transfer)}>Reject</button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -342,6 +483,8 @@ export default function OrganizationWorkspace() {
                       <div className="recall-card-footer">
                         {recall.status === "ACKNOWLEDGED" ? (
                           <span className="recall-acknowledged">✓ Acknowledged</span>
+                        ) : me.subRole === "VIEWER" ? (
+                          <span className="muted">Read-only access: an Org Admin or Operator can acknowledge.</span>
                         ) : (
                           <>
                             <span>Confirm you have stopped selling and removed the batch.</span>
@@ -383,7 +526,7 @@ export default function OrganizationWorkspace() {
               </div>
             </div>
             <section className="dashboard-grid">
-              {me.organization.kind === "MANUFACTURER" ? (
+              {me.organization.kind === "MANUFACTURER" && me.subRole !== "VIEWER" ? (
                 <div className="panel">
                   <div className="eyebrow">MANUFACTURER ACTION</div>
                   <h2>Register a batch</h2>
@@ -439,14 +582,14 @@ export default function OrganizationWorkspace() {
                 <div className="panel role-note">
                   <div className="eyebrow">YOUR ROLE</div>
                   <h2>
-                    {me.organization.kind === "PHARMACY"
+                    {me.subRole === "VIEWER" ? "Read-only access" : me.organization.kind === "PHARMACY"
                       ? "Pharmacy stock"
                       : "Distribution stock"}
                   </h2>
                   <p>
-                    Your organization can accept recorded deliveries, review its
-                    current inventory, and offer custody to another approved
-                    organization.
+                    {me.subRole === "VIEWER"
+                      ? "You can view your organization’s inventory, custody history, incoming transfers, and active recalls. Organization actions are disabled."
+                      : "Your organization can accept recorded deliveries, review its current inventory, and offer custody to another approved organization."}
                   </p>
                 </div>
               )}
@@ -506,9 +649,13 @@ export default function OrganizationWorkspace() {
                             </button>
                           </td>
                           <td>
-                            {!batch.recalled && partners.length ? (
-                              <button type="button" className="primary" onClick={() => setTransferBatch(batch)}>Transfer</button>
-                            ) : <span className="muted">{batch.recalled ? "Transfer locked" : "No approved recipients"}</span>}
+                            {batch.recalled
+                              ? <span className="muted">Transfer locked</span>
+                              : me.subRole === "VIEWER"
+                                ? <span className="muted">Read-only</span>
+                                : partners.length
+                                  ? <button type="button" className="primary" onClick={() => setTransferBatch(batch)}>Transfer</button>
+                                  : <span className="muted">No approved recipients</span>}
                           </td>
                         </tr>
                         {custodyOpenId === batch.id && (
@@ -548,6 +695,24 @@ export default function OrganizationWorkspace() {
               <div className="modal-actions">
                 <button type="button" className="secondary" onClick={() => setTransferBatch(null)}>Cancel</button>
                 <button className="primary">Send transfer offer</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+      {teamModalOpen && me?.organization && (
+        <div className="transfer-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setTeamModalOpen(false); }}>
+          <section className="transfer-modal" role="dialog" aria-modal="true" aria-labelledby="team-modal-title">
+            <div className="eyebrow">ORGANIZATION ACCESS</div>
+            <h2 id="team-modal-title">Add team member</h2>
+            <p className="muted">A secure temporary password will be generated after the account is created.</p>
+            <form className="stack-form" onSubmit={(event) => void addTeamMember(event)}>
+              <label>Full name<input name="name" required maxLength={160} /></label>
+              <label>Email address<input name="email" type="email" required maxLength={254} /></label>
+              <label>Role<select name="subRole" defaultValue="OPERATOR"><option value="OPERATOR">Operator</option><option value="VIEWER">Viewer</option></select></label>
+              <div className="modal-actions">
+                <button type="button" className="secondary" onClick={() => setTeamModalOpen(false)}>Cancel</button>
+                <button className="primary">Add member</button>
               </div>
             </form>
           </section>

@@ -23,7 +23,7 @@ await app.register(helmet, {
   frameguard: { action: 'deny' },
   hsts: process.env.NODE_ENV === 'production' ? { maxAge: 31_536_000, includeSubDomains: true } : false,
 });
-await app.register(cors, { origin: env.WEB_ORIGIN, methods: ['GET', 'POST'], allowedHeaders: ['Authorization', 'Content-Type'] });
+await app.register(cors, { origin: env.WEB_ORIGIN, methods: ['GET', 'POST', 'PATCH', 'DELETE'], allowedHeaders: ['Authorization', 'Content-Type'] });
 await app.register(rateLimit, { max: 120, timeWindow: '1 minute' });
 await app.register(jwt, { secret: env.JWT_SECRET, sign: { expiresIn: `${env.TOKEN_MINUTES}m` } });
 
@@ -37,6 +37,8 @@ const idSchema = z.string().uuid();
 const emailSchema = z.string().email().max(254);
 const strongPassword = z.string().min(12).max(128);
 const orgKinds = ['MANUFACTURER', 'DISTRIBUTOR', 'PHARMACY'] as const;
+const organizationSubRoles = ['ORG_ADMIN', 'OPERATOR', 'VIEWER'] as const;
+const memberSubRoles = ['OPERATOR', 'VIEWER'] as const;
 const parse = <T extends z.ZodTypeAny>(schema: T, value: unknown): z.infer<T> => schema.parse(value);
 const error = (statusCode: number, message: string) => Object.assign(new Error(message), { statusCode });
 
@@ -73,6 +75,16 @@ async function requireRegulator(request: FastifyRequest) {
   const user = await loadUser(request);
   if (user.role !== 'REGULATOR') throw error(403, 'Regulator role required');
   return user;
+}
+function requireOrganizationWrite(user: User) {
+  if (user.role !== 'ORGANIZATION' || !['ORG_ADMIN', 'OPERATOR'].includes(user.subRole)) {
+    throw error(403, 'This organization account has read-only access');
+  }
+}
+function requireOrganizationAdmin(user: User) {
+  if (user.role !== 'ORGANIZATION' || user.subRole !== 'ORG_ADMIN') {
+    throw error(403, 'Organization admin role required');
+  }
 }
 async function audit(tx: Prisma.TransactionClient, batchId: string, actorUserId: string | null,
                      eventType: string, details: string) {
@@ -131,7 +143,7 @@ app.post('/auth/login', { config: { rateLimit: { max: 5, timeWindow: '15 minutes
 app.get('/auth/me', { preHandler: [app.authenticate] }, async (request) => {
   const user = await loadUser(request);
   const org = user.organizationId ? await prisma.organization.findUnique({ where: { id: user.organizationId } }) : null;
-  return { id: user.id, email: user.email, role: user.role,
+  return { id: user.id, email: user.email, name: user.name, role: user.role, subRole: user.subRole,
     organization: org ? { id: org.id, name: org.name, kind: org.kind, approved: org.approved } : null };
 });
 
@@ -143,7 +155,7 @@ app.post('/organizations', { preHandler: [app.authenticate] }, async (request, r
   try {
     const organization = await prisma.organization.create({ data: {
       name: body.name, kind: body.kind, licenseNumber: body.licenseNumber,
-      users: { create: { email: body.adminEmail.toLowerCase(), passwordHash: await passwordHash(body.adminPassword), role: 'ORGANIZATION' } },
+      users: { create: { email: body.adminEmail.toLowerCase(), passwordHash: await passwordHash(body.adminPassword), role: 'ORGANIZATION', subRole: 'ORG_ADMIN' } },
     }, include: { users: { select: { id: true, email: true } } } });
     return reply.code(201).send({ id: organization.id, name: organization.name, kind: organization.kind,
       approved: organization.approved, account: organization.users[0] });
@@ -170,6 +182,115 @@ app.get('/organizations/active', { preHandler: [app.authenticate] }, async (requ
   const { org } = await loadOrganization(request);
   return prisma.organization.findMany({ where: { approved: true, id: { not: org.id } },
     orderBy: { name: 'asc' }, select: { id: true, name: true, kind: true } });
+});
+
+app.get('/admin/organizations/:organizationId/users', { preHandler: [app.authenticate] }, async request => {
+  const { user, org } = await loadOrganization(request);
+  const { organizationId } = parse(z.object({ organizationId: idSchema }), request.params);
+  if (organizationId !== org.id) throw error(403, 'Organization access denied');
+  requireOrganizationAdmin(user);
+  return prisma.user.findMany({
+    where: { organizationId: org.id, role: 'ORGANIZATION' },
+    orderBy: [{ createdAt: 'asc' }, { email: 'asc' }],
+    select: { id: true, name: true, email: true, subRole: true, active: true },
+  });
+});
+
+app.patch('/admin/organizations/:organizationId', { preHandler: [app.authenticate] }, async request => {
+  const { user, org } = await loadOrganization(request);
+  const { organizationId } = parse(z.object({ organizationId: idSchema }), request.params);
+  if (organizationId !== org.id) throw error(403, 'Organization access denied');
+  requireOrganizationAdmin(user);
+  const { name } = parse(z.object({ name: z.string().trim().min(2).max(160) }), request.body);
+  return prisma.organization.update({
+    where: { id: org.id },
+    data: { name },
+    select: { id: true, name: true, kind: true, approved: true },
+  });
+});
+
+app.post('/admin/organizations/:organizationId/users', { preHandler: [app.authenticate] }, async (request, reply) => {
+  const { user, org } = await loadOrganization(request);
+  const { organizationId } = parse(z.object({ organizationId: idSchema }), request.params);
+  if (organizationId !== org.id) throw error(403, 'Organization access denied');
+  requireOrganizationAdmin(user);
+  const body = parse(z.object({
+    email: emailSchema,
+    name: z.string().trim().min(1).max(160),
+    subRole: z.enum(memberSubRoles),
+  }), request.body);
+  const temporaryPassword = randomBytes(24).toString('base64url');
+  try {
+    const member = await prisma.user.create({
+      data: {
+        email: body.email.toLowerCase(),
+        name: body.name,
+        passwordHash: await passwordHash(temporaryPassword),
+        role: 'ORGANIZATION',
+        subRole: body.subRole,
+        organizationId: org.id,
+      },
+      select: { id: true, name: true, email: true, subRole: true, active: true },
+    });
+    return reply.code(201).send({ ...member, temporaryPassword });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw error(409, 'Email is already registered');
+    }
+    throw err;
+  }
+});
+
+app.patch('/admin/organizations/:organizationId/users/:userId', { preHandler: [app.authenticate] }, async request => {
+  const { user, org } = await loadOrganization(request);
+  const { organizationId, userId } = parse(z.object({ organizationId: idSchema, userId: idSchema }), request.params);
+  if (organizationId !== org.id) throw error(403, 'Organization access denied');
+  const target = await prisma.user.findFirst({ where: { id: userId, organizationId: org.id, role: 'ORGANIZATION' } });
+  if (!target) throw error(404, 'Organization member not found');
+  requireOrganizationAdmin(user);
+  const { subRole } = parse(z.object({ subRole: z.enum(organizationSubRoles) }), request.body);
+  try {
+    return await prisma.$transaction(async tx => {
+      if (target.active && target.subRole === 'ORG_ADMIN' && subRole !== 'ORG_ADMIN') {
+        const adminCount = await tx.user.count({ where: { organizationId: org.id, role: 'ORGANIZATION', subRole: 'ORG_ADMIN', active: true } });
+        if (adminCount <= 1) throw error(409, 'An organization must have at least one active Org Admin');
+      }
+      return tx.user.update({
+        where: { id: target.id },
+        data: { subRole },
+        select: { id: true, name: true, email: true, subRole: true, active: true },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+      throw error(409, 'Concurrent team update; retry the request');
+    }
+    throw err;
+  }
+});
+
+app.delete('/admin/organizations/:organizationId/users/:userId', { preHandler: [app.authenticate] }, async request => {
+  const { user, org } = await loadOrganization(request);
+  const { organizationId, userId } = parse(z.object({ organizationId: idSchema, userId: idSchema }), request.params);
+  if (organizationId !== org.id) throw error(403, 'Organization access denied');
+  const target = await prisma.user.findFirst({ where: { id: userId, organizationId: org.id, role: 'ORGANIZATION' } });
+  if (!target) throw error(404, 'Organization member not found');
+  requireOrganizationAdmin(user);
+  try {
+    return await prisma.$transaction(async tx => {
+      if (target.active && target.subRole === 'ORG_ADMIN') {
+        const adminCount = await tx.user.count({ where: { organizationId: org.id, role: 'ORGANIZATION', subRole: 'ORG_ADMIN', active: true } });
+        if (adminCount <= 1) throw error(409, 'An organization must have at least one active Org Admin');
+      }
+      await tx.user.delete({ where: { id: target.id } });
+      return { id: target.id, removed: true };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2034') {
+      throw error(409, 'Concurrent team update; retry the request');
+    }
+    throw err;
+  }
 });
 
 app.get('/regulator/batches', { preHandler: [app.authenticate] }, async (request) => {
@@ -277,6 +398,7 @@ app.get('/admin/dashboard', { preHandler: [app.authenticate] }, async (request) 
 app.post('/batches', { preHandler: [app.authenticate] }, async (request, reply) => {
   const { user, org } = await loadOrganization(request);
   if (org.kind !== 'MANUFACTURER') throw error(403, 'Only manufacturers can register batches');
+  requireOrganizationWrite(user);
   const body = parse(z.object({ medicineName: z.string().trim().min(1).max(160), strength: z.string().trim().min(1).max(80),
     batchNumber: z.string().trim().min(1).max(100), expiryDate: z.coerce.date(), quantity: z.number().int().positive(),
     commonUse: z.string().trim().optional(),
@@ -306,16 +428,17 @@ app.get('/batches', { preHandler: [app.authenticate] }, async (request) => {
 async function offerTransfer(request: FastifyRequest, reply: FastifyReply) {
   const { user, org } = await loadOrganization(request);
   const { batchId } = parse(z.object({ batchId: idSchema }), request.params);
-  const { recipientOrganizationId } = parse(z.object({ recipientOrganizationId: idSchema }), request.body);
-  const recipient = await prisma.organization.findUnique({ where: { id: recipientOrganizationId } });
-  if (!recipient?.approved || recipient.id === org.id) throw error(422, 'Recipient must be a different approved organization');
 
   try {
     const created = await prisma.$transaction(async tx => {
       const batch = await tx.batch.findUnique({ where: { id: batchId } });
       if (!batch) throw error(404, 'Batch not found');
       if (batch.currentHolderId !== org.id) throw error(403, 'Only the current holder can transfer this batch');
+      requireOrganizationWrite(user);
+      const { recipientOrganizationId } = parse(z.object({ recipientOrganizationId: idSchema }), request.body);
       if (batch.recalled) throw error(409, 'Recalled batches cannot be transferred');
+      const recipient = await tx.organization.findUnique({ where: { id: recipientOrganizationId } });
+      if (!recipient?.approved || recipient.id === org.id) throw error(422, 'Recipient must be a different approved organization');
       const pending = await tx.transfer.findFirst({ where: { batchId, status: 'PENDING' } });
       if (pending) throw error(409, 'Batch already has a pending transfer');
       const transfer = await tx.transfer.create({ data: { batchId, fromOrganizationId: org.id, toOrganizationId: recipient.id } });
@@ -324,7 +447,7 @@ async function offerTransfer(request: FastifyRequest, reply: FastifyReply) {
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     anchorAuditEvent(created.auditEvent);
     return reply.code(201).send({ id: created.transfer.id, batchId,
-      recipientOrganizationId: recipient.id, status: created.transfer.status });
+      recipientOrganizationId: created.transfer.toOrganizationId, status: created.transfer.status });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && ['P2002', 'P2034'].includes(err.code)) {
       throw error(409, 'Batch already has a pending transfer');
@@ -350,6 +473,7 @@ async function confirmTransfer(transferId: string, user: User, org: Organization
     const confirmed = await prisma.$transaction(async tx => {
       const transfer = await tx.transfer.findUnique({ where: { id: transferId } });
       if (!transfer || transfer.toOrganizationId !== org.id) throw error(404, 'Incoming transfer not found');
+      requireOrganizationWrite(user);
       const batch = await tx.batch.findUnique({ where: { id: transfer.batchId } });
       if (!batch || transfer.status !== 'PENDING' || batch.currentHolderId !== transfer.fromOrganizationId) throw error(409, 'Transfer is no longer valid');
       if (batch.recalled) throw error(409, 'Recalled batches cannot be confirmed');
@@ -387,6 +511,7 @@ app.post('/batches/:batchId/reject', { preHandler: [app.authenticate] }, async r
   const rejected = await prisma.$transaction(async tx => {
     const transfer = await tx.transfer.findFirst({ where: { batchId, status: 'PENDING' } });
     if (!transfer || transfer.toOrganizationId !== org.id) throw error(404, 'Incoming transfer not found');
+    requireOrganizationWrite(user);
     await tx.transfer.update({ where: { id: transfer.id }, data: { status: 'REJECTED' } });
     const auditEvent = await audit(tx, batchId, user.id, 'TRANSFER_REJECTED', 'Transfer rejected by recipient');
     return { transfer, auditEvent };
@@ -554,6 +679,7 @@ app.post('/recalls/:recallId/acknowledge', { preHandler: [app.authenticate] }, a
     if (!acknowledgment) {
       throw error(404, 'Pending recall acknowledgment not found for this organization');
     }
+    requireOrganizationWrite(user);
     const updated = await tx.recallAcknowledgment.update({
       where: { id: acknowledgment.id },
       data: { status: 'ACKNOWLEDGED', acknowledgedAt: new Date() },
