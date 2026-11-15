@@ -1,0 +1,32 @@
+{
+  "name": "ananta-medicine-tracker",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c green,cyan \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "npm run dev --workspace @ananta/api",
+    "dev:web": "npm run dev --workspace @ananta/web",
+    "build": "npm run build --workspace @ananta/api && npm run build --workspace @ananta/web",
+    "db:generate": "npm run db:generate --workspace @ananta/api",
+    "db:migrate": "npm run db:migrate --workspace @ananta/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=20.11"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "prisma@6.19.3": true,
+    "esbuild@0.28.2": true
+  },
+  "dependencies": {
+    "@neon/config": "^1.14.0",
+    "@neon/env": "^2.1.3"
+  }
+}
